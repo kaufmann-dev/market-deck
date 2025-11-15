@@ -3,14 +3,8 @@ let TAG_COLORS = {};
 
 
 // ═══════════════════════════════════════════
-//  PROXY CONFIG & STATE
+//  STATE
 // ═══════════════════════════════════════════
-const PROXIES = [
-  u => `https://corsproxy.io/?${encodeURIComponent(u)}`,
-  u => `https://api.allorigins.win/get?url=${encodeURIComponent(u)}`,
-  u => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`,
-];
-
 const MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 let state = {
@@ -20,7 +14,6 @@ let state = {
   view: "r",
   cache: {},       // { listId: { ticker: [points] } }
   fxCache: {},     // { "EURUSD=X": [points], etc }
-  workingProxy: null,
 };
 
 let GLOBAL_BASE_CURRENCY = "USD";
@@ -104,40 +97,11 @@ function setStatus(html, type) {
   txt.innerHTML = html;
 }
 
-// ═══════════════════════════════════════════
-//  FETCH
-// ═══════════════════════════════════════════
-async function fetchWithFallback(url) {
-  const proxies = state.workingProxy !== null
-    ? [PROXIES[state.workingProxy], ...PROXIES.filter((_, i) => i !== state.workingProxy)]
-    : PROXIES;
-  for (const proxyFn of proxies) {
-    const idx = PROXIES.indexOf(proxyFn);
-    try {
-      const res = await fetch(proxyFn(url), { signal: AbortSignal.timeout(9000) });
-      if (!res.ok) continue;
-      const raw = await res.text();
-      let parsed;
-      try {
-        const j = JSON.parse(raw);
-        parsed = j.contents ? JSON.parse(j.contents) : j;
-      } catch { continue; }
-      if (!parsed?.chart?.result?.[0]) continue;
-      state.workingProxy = idx;
-      return parsed;
-    } catch { /* try next */ }
-  }
-  throw new Error("All proxies failed — Yahoo Finance data unavailable.");
-}
-
-async function fetchTicker(ticker) {
-  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=14mo&includePrePost=false`;
-  const data = await fetchWithFallback(url);
-  const r = data.chart.result[0];
-  const closes = r.indicators.adjclose[0].adjclose;
-  const ts = r.timestamp;
-  return ts.map((t, i) => ({ date: new Date(t * 1000), close: closes[i] }))
-    .filter(p => p.close !== null && p.close !== undefined && !isNaN(p.close));
+// Parse API response points (date strings → Date objects)
+function parsePoints(arr) {
+  if (!arr) return null;
+  return arr.map(p => ({ date: new Date(p.date), close: p.close }))
+    .filter(p => p.close !== null && !isNaN(p.close));
 }
 
 function closestAfter(points, targetDate) {
@@ -167,7 +131,7 @@ function getMonthlyReturns(points) {
 }
 
 // ═══════════════════════════════════════════
-//  LOAD DATA
+//  LOAD DATA (server-side via /api/prices)
 // ═══════════════════════════════════════════
 async function loadData(listId) {
   const list = LISTS[listId];
@@ -185,68 +149,43 @@ async function loadData(listId) {
 
   state.cache[listId] = {};
   try {
-    // 1. Identify all foreign currencies in this list
+    // 1. Identify all tickers + FX pairs needed
+    const stockTickers = list.items.map(s => s.ticker);
+
     const foreignCurrencies = [...new Set(
       list.items
         .map(s => s.currency)
-        .filter(c => c && c !== GLOBAL_BASE_CURRENCY)
+        .filter(c => c && c !== GLOBAL_BASE_CURRENCY && c !== "USX")
     )];
 
-    let fxLoaded = 0;
-    let tickerLoaded = 0;
-    const fxTotal = foreignCurrencies.filter(c => c !== "USX").length;
-    const tickerTotal = list.items.length;
+    const fxTickers = foreignCurrencies.map(cur => {
+      const prefix = cur === "GBp" ? "GBP" : cur;
+      return `${prefix}${GLOBAL_BASE_CURRENCY}=X`;
+    }).filter(t => !state.fxCache[t]); // skip already cached FX
 
-    // 2. Fetch Forex pairs alongside standard tickers
-    const fetchPromises = [];
+    const allTickers = [...stockTickers, ...fxTickers];
 
-    // Forex fetch promises
-    foreignCurrencies.forEach(cur => {
-      // e.g. "EURUSD=X"
-      // If the currency is "USX" (US Cents), we handle it mathematically later, no need to fetch it
-      if (cur === "USX") {
-        return;
-      }
+    if (state.activeList === listId) {
+      document.getElementById("status-text").textContent = `Fetching ${stockTickers.length} tickers + ${fxTickers.length} FX rates…`;
+    }
 
-      let fxTicker = `${cur}${GLOBAL_BASE_CURRENCY}=X`;
-      if (cur === "GBp") {
-        fxTicker = `GBP${GLOBAL_BASE_CURRENCY}=X`;
-      }
-      // Check if we already have it in the global fxCache
-      if (!state.fxCache[fxTicker]) {
-        fetchPromises.push(
-          fetchTicker(fxTicker).then(data => {
-            state.fxCache[fxTicker] = data;
-            fxLoaded++;
-            if (state.activeList === listId) {
-              document.getElementById("status-text").textContent = `Loading FX rates… ${fxLoaded}/${fxTotal}`;
-            }
-          }).catch(() => {
-            state.fxCache[fxTicker] = null;
-            fxLoaded++;
-          })
-        );
-      } else {
-      }
+    // 2. Single batch request to server
+    const res = await fetch("/api/prices", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tickers: allTickers })
+    });
+    const priceData = await res.json();
+
+    // 3. Populate caches
+    stockTickers.forEach(t => {
+      state.cache[listId][t] = parsePoints(priceData[t]);
     });
 
-    // Stock fetch promises
-    list.items.forEach(s => {
-      fetchPromises.push(
-        fetchTicker(s.ticker).then(data => {
-          state.cache[listId][s.ticker] = data;
-          tickerLoaded++;
-          if (state.activeList === listId) {
-            document.getElementById("status-text").textContent = `Loading ${list.shortName}… ${tickerLoaded}/${tickerTotal} tickers`;
-          }
-        }).catch(() => {
-          state.cache[listId][s.ticker] = null;
-          tickerLoaded++;
-        })
-      );
+    fxTickers.forEach(t => {
+      state.fxCache[t] = parsePoints(priceData[t]);
     });
 
-    await Promise.all(fetchPromises);
     if (state.activeList === listId) finishLoad(listId);
   } catch (e) {
     if (state.activeList === listId) {

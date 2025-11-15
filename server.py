@@ -2,13 +2,16 @@
 server.py – FastAPI backend serving static files + REST API for watchlist CRUD
 Run:  python server.py
 """
-import sqlite3, os, json
+import sqlite3, os, json, math
 from contextlib import contextmanager
+from datetime import datetime
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List
+import yfinance as yf
+import pandas as pd
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(APP_DIR, "data.db")
@@ -60,6 +63,9 @@ class WatchlistUpdate(BaseModel):
 
 class SettingUpdate(BaseModel):
     value: str
+
+class PricesRequest(BaseModel):
+    tickers: List[str]
 
 class TagColorUpdate(BaseModel):
     bg: str
@@ -220,6 +226,107 @@ def update_tag_color(tag: str, body: TagColorUpdate):
                      (tag, body.bg, body.text, body.border))
         conn.commit()
     return {"ok": True}
+
+# ══════════════════════════════════════
+#  API: PRICES (server-side yfinance fetch)
+#  In-memory per-ticker cache with TTL
+# ══════════════════════════════════════
+import time as _time
+
+CACHE_TTL = 300  # 5 minutes
+
+# In-memory per-ticker result cache
+_price_cache = {}  # { "AAPL": { "data": [...], "ts": 1234567890 } }
+
+def _is_cached(ticker):
+    entry = _price_cache.get(ticker)
+    if entry and (_time.time() - entry["ts"]) < CACHE_TTL:
+        return True
+    return False
+
+def _get_cached(ticker):
+    return _price_cache[ticker]["data"]
+
+def _set_cached(ticker, data):
+    _price_cache[ticker] = {"data": data, "ts": _time.time()}
+
+def _parse_df(df, tickers):
+    """Parse a yfinance DataFrame into {ticker: [{date, close}, ...]}"""
+    result = {}
+    if df.empty:
+        return {t: None for t in tickers}
+
+    if len(tickers) == 1:
+        ticker = tickers[0]
+        if "Close" in df.columns:
+            closes = df["Close"].dropna()
+            points = []
+            for date, close in closes.items():
+                if not math.isnan(close):
+                    points.append({"date": date.strftime("%Y-%m-%d"), "close": round(float(close), 4)})
+            result[ticker] = points if points else None
+        else:
+            result[ticker] = None
+    else:
+        for ticker in tickers:
+            try:
+                if ("Close", ticker) in df.columns:
+                    closes = df[("Close", ticker)].dropna()
+                elif hasattr(df, "Close") and ticker in df["Close"].columns:
+                    closes = df["Close"][ticker].dropna()
+                else:
+                    result[ticker] = None
+                    continue
+                points = []
+                for date, close in closes.items():
+                    if not math.isnan(close):
+                        points.append({"date": date.strftime("%Y-%m-%d"), "close": round(float(close), 4)})
+                result[ticker] = points if points else None
+            except Exception:
+                result[ticker] = None
+    return result
+
+@app.post("/api/prices")
+def fetch_prices(body: PricesRequest):
+    tickers = body.tickers
+    if not tickers:
+        return {}
+
+    result = {}
+
+    # Check in-memory cache first — serve cached tickers instantly
+    need_fetch = []
+    for t in tickers:
+        if _is_cached(t):
+            result[t] = _get_cached(t)
+        else:
+            need_fetch.append(t)
+
+    # Only download tickers not in cache
+    if need_fetch:
+        try:
+            df = yf.download(
+                need_fetch,
+                period="14mo",
+                interval="1d",
+                auto_adjust=True,
+                progress=False,
+                threads=True,
+            )
+            fresh = _parse_df(df, need_fetch)
+            for t, data in fresh.items():
+                result[t] = data
+                _set_cached(t, data)
+        except Exception as e:
+            print(f"yfinance download error: {e}")
+            for t in need_fetch:
+                result[t] = None
+
+    for t in tickers:
+        if t not in result:
+            result[t] = None
+
+    return result
 
 # ══════════════════════════════════════
 #  STATIC FILES (serve index.html + assets)
