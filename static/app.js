@@ -14,6 +14,7 @@ let state = {
   view: "r",
   cache: {},       // { listId: { ticker: [points] } }
   fxCache: {},     // { "EURUSD=X": [points], etc }
+  currentView: "home",   // "home" or "list"
 };
 
 let GLOBAL_BASE_CURRENCY = "USD";
@@ -23,14 +24,14 @@ let GLOBAL_BASE_CURRENCY = "USD";
 // ═══════════════════════════════════════════
 function buildSidebar() {
   const nav = document.getElementById("sidebar");
-  let html = `<div class="sidebar-title">Watchlists</div>`;
+  let html = `<button class="sidebar-home-btn${state.currentView === 'home' ? ' active' : ''}" onclick="showHome()">⌂ MarketDeck</button>`;
   let lastCat = null;
   for (const [id, list] of Object.entries(LISTS)) {
     if (list.category !== lastCat) {
       html += `<div class="sidebar-section">${list.category}</div>`;
       lastCat = list.category;
     }
-    html += `<button class="list-btn" data-list="${id}" onclick="switchList('${id}')">
+    html += `<button class="list-btn${state.activeList === id && state.currentView === 'list' ? ' active' : ''}" data-list="${id}" onclick="switchList('${id}')">
       <span>${list.shortName}</span>
       <span class="count">${list.items.length}</span>
     </button>`;
@@ -38,18 +39,30 @@ function buildSidebar() {
   nav.innerHTML = html;
 }
 
+// ═══════════════════════════════════════════
+//  NAVIGATION
+// ═══════════════════════════════════════════
+function showHome() {
+  state.currentView = "home";
+  state.activeList = null;
+  document.getElementById("view-home").style.display = "block";
+  document.getElementById("view-list").style.display = "none";
+  closeEditor();
+  buildSidebar();
+  renderHomepage();
+}
+
 function switchList(id) {
-  if (state.activeList === id) return;
+  state.currentView = "list";
   state.activeList = id;
 
-  // update sidebar active
-  document.querySelectorAll(".list-btn").forEach(b => {
-    b.classList.toggle("active", b.dataset.list === id);
-  });
+  document.getElementById("view-home").style.display = "none";
+  document.getElementById("view-list").style.display = "block";
+
+  buildSidebar();
 
   const list = LISTS[id];
   document.getElementById("page-title").textContent = list.name;
-  document.getElementById("header-tag").textContent = list.tag;
   document.getElementById("page-subtitle").textContent = list.description;
 
   // reset view
@@ -60,6 +73,197 @@ function switchList(id) {
   document.getElementById("view-h").style.display = "none";
 
   loadData(id);
+}
+
+// ═══════════════════════════════════════════
+//  HOMEPAGE
+// ═══════════════════════════════════════════
+function renderHomepage() {
+  document.getElementById("home-currency-input").value = GLOBAL_BASE_CURRENCY;
+
+  // Render watchlist cards
+  const grid = document.getElementById("home-grid");
+  let html = "";
+  for (const [id, list] of Object.entries(LISTS)) {
+    html += `<div class="wl-card" onclick="switchList('${id}')">
+      <button class="wl-card-edit" onclick="event.stopPropagation();openListEditModal('${id}')" title="Edit list">✎</button>
+      <div class="wl-card-name">${list.name}</div>
+      <div class="wl-card-meta">
+        <span class="wl-card-count">${list.items.length} tickers</span>
+        <span class="wl-card-category">${list.category}</span>
+      </div>
+      ${list.description ? `<div class="wl-card-desc">${list.description}</div>` : ""}
+    </div>`;
+  }
+  html += `<div class="wl-card-new" onclick="openCreateListModal()">
+    <div class="wl-card-new-icon">+</div>
+    <div class="wl-card-new-label">Create New List</div>
+  </div>`;
+  grid.innerHTML = html;
+
+  // Render tag colors editor
+  renderTagColorsEditor();
+}
+
+// ═══════════════════════════════════════════
+//  TAG COLOR EDITOR
+// ═══════════════════════════════════════════
+function autoGenerateTagColors(hex) {
+  // From a single hex color, generate bg (12% opacity), text (full), border (30% opacity)
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return {
+    bg: `rgba(${r},${g},${b},0.12)`,
+    text: hex,
+    border: `rgba(${r},${g},${b},0.30)`
+  };
+}
+
+function hexFromTagColors(tc) {
+  // Try to extract the hex from the text color
+  if (tc.text && tc.text.startsWith("#")) return tc.text;
+  // Fallback: try to parse rgb
+  const m = tc.text && tc.text.match(/(\d+),\s*(\d+),\s*(\d+)/);
+  if (m) {
+    const toHex = n => parseInt(n).toString(16).padStart(2, "0");
+    return `#${toHex(m[1])}${toHex(m[2])}${toHex(m[3])}`;
+  }
+  return "#68d391";
+}
+
+function renderTagColorsEditor() {
+  const container = document.getElementById("tag-colors-editor");
+  let html = `<div class="tag-color-grid">`;
+  for (const [tag, colors] of Object.entries(TAG_COLORS)) {
+    const hex = hexFromTagColors(colors);
+    const preview = autoGenerateTagColors(hex);
+    html += `<div class="tag-color-row">
+      <span class="tag-color-preview" style="background:${preview.bg};color:${preview.text};border:1px solid ${preview.border}">${tag}</span>
+      <input type="color" class="tag-color-input" value="${hex}" data-tag="${tag}" onchange="updateTagColor('${tag}', this.value)" />
+      <button class="tag-color-del" onclick="deleteTagColor('${tag}')" title="Delete">✕</button>
+    </div>`;
+  }
+  html += `</div>`;
+  container.innerHTML = html;
+}
+
+async function updateTagColor(tag, hex) {
+  const colors = autoGenerateTagColors(hex);
+  try {
+    await fetch(`/api/tag-colors/${encodeURIComponent(tag)}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(colors)
+    });
+    TAG_COLORS[tag] = colors;
+    renderTagColorsEditor();
+  } catch (e) { alert("Error: " + e.message); }
+}
+
+async function deleteTagColor(tag) {
+  if (!confirm(`Remove color for "${tag}"?`)) return;
+  try {
+    await fetch(`/api/tag-colors/${encodeURIComponent(tag)}`, { method: "DELETE" });
+    delete TAG_COLORS[tag];
+    renderTagColorsEditor();
+  } catch (e) { alert("Error: " + e.message); }
+}
+
+async function addTagColor() {
+  const name = document.getElementById("tag-new-name").value.trim();
+  const hex = document.getElementById("tag-new-color").value;
+  if (!name) return alert("Tag name is required.");
+  const colors = autoGenerateTagColors(hex);
+  try {
+    await fetch(`/api/tag-colors/${encodeURIComponent(name)}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(colors)
+    });
+    TAG_COLORS[name] = colors;
+    document.getElementById("tag-new-name").value = "";
+    renderTagColorsEditor();
+  } catch (e) { alert("Error: " + e.message); }
+}
+
+// ═══════════════════════════════════════════
+//  LIST EDIT MODAL
+// ═══════════════════════════════════════════
+let _editingListSlug = null;
+
+function openListEditModal(slug) {
+  _editingListSlug = slug;
+  const list = LISTS[slug];
+  document.getElementById("list-edit-title").textContent = `Edit: ${list.name}`;
+  document.getElementById("le-name").value = list.name;
+  document.getElementById("le-short").value = list.shortName;
+  document.getElementById("le-category").value = list.category;
+  document.getElementById("le-desc").value = list.description;
+  document.querySelector("#list-edit-modal .btn-red").style.display = "";
+  document.getElementById("list-edit-modal").style.display = "block";
+}
+
+function closeListEditModal() {
+  _editingListSlug = null;
+  document.getElementById("list-edit-modal").style.display = "none";
+}
+
+function openCreateListModal() {
+  _editingListSlug = "__new__";
+  document.getElementById("list-edit-title").textContent = "Create New List";
+  document.getElementById("le-name").value = "";
+  document.getElementById("le-short").value = "";
+  document.getElementById("le-category").value = "";
+  document.getElementById("le-desc").value = "";
+  // Hide delete button for new lists
+  document.querySelector("#list-edit-modal .btn-red").style.display = "none";
+  document.getElementById("list-edit-modal").style.display = "block";
+}
+
+async function saveListFromModal() {
+  const name = document.getElementById("le-name").value.trim();
+  const short_name = document.getElementById("le-short").value.trim();
+  const category = document.getElementById("le-category").value.trim() || "Other";
+  const description = document.getElementById("le-desc").value.trim();
+
+  if (!name || !short_name) return alert("Name and Short Name are required.");
+
+  if (_editingListSlug === "__new__") {
+    // Create new list — auto-generate slug from short_name
+    const slug = short_name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+    if (!slug) return alert("Short Name must contain letters or numbers.");
+    try {
+      await fetch("/api/lists", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ slug, name, short_name, category, description, tag: "", currency: GLOBAL_BASE_CURRENCY })
+      });
+      closeListEditModal();
+      await refreshApp();
+    } catch (e) { alert("Error: " + e.message); }
+  } else {
+    // Update existing
+    try {
+      await fetch(`/api/lists/${_editingListSlug}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, short_name, category, description, tag: LISTS[_editingListSlug]?.tag || "" })
+      });
+      closeListEditModal();
+      await refreshApp();
+    } catch (e) { alert("Error: " + e.message); }
+  }
+}
+
+async function deleteListFromModal() {
+  if (!_editingListSlug || _editingListSlug === "__new__") return;
+  if (!confirm(`Delete the entire "${LISTS[_editingListSlug].name}" list?`)) return;
+  try {
+    await fetch(`/api/lists/${_editingListSlug}`, { method: "DELETE" });
+    closeListEditModal();
+    await refreshApp();
+  } catch (e) { alert("Error: " + e.message); }
 }
 
 // ═══════════════════════════════════════════
@@ -278,8 +482,6 @@ function getScored() {
         const fxPts = state.fxCache[fxTicker];
         if (fxPts && fxPts.length > 0) {
           pts = pts.map(p => {
-            // Find closest chronological FX rate on or before the stock's date
-            // Binary search or simple reverse scan is fine since data is small
             let rate = null;
             for (let i = fxPts.length - 1; i >= 0; i--) {
               if (fxPts[i].date <= p.date) {
@@ -287,11 +489,9 @@ function getScored() {
                 break;
               }
             }
-            // If no prior rate, use the earliest available
             if (rate === null) rate = fxPts[0].close;
 
             let finalRate = rate;
-            // GBp (pence) requires dividing the rate by 100 since the rate is for GBP (Pounds)
             if (s.currency === "GBp") {
               finalRate = rate / 100;
             }
@@ -421,21 +621,13 @@ function render() {
 }
 
 // ═══════════════════════════════════════════
-//  EDITOR
+//  TICKER EDITOR (simplified — tickers only)
 // ═══════════════════════════════════════════
 function openEditor() {
   if (!state.activeList) return;
   const slug = state.activeList;
   const list = LISTS[slug];
-
-  document.getElementById("ed-base-currency").value = GLOBAL_BASE_CURRENCY;
-  document.getElementById("ed-list-slug").textContent = slug;
-  document.getElementById("ed-list-name").value = list.name;
-  document.getElementById("ed-list-short").value = list.shortName;
-  document.getElementById("ed-list-category").value = list.category;
-  document.getElementById("ed-list-tag").value = list.tag;
-  document.getElementById("ed-list-desc").value = list.description;
-
+  document.getElementById("ed-list-name-label").textContent = list.name;
   renderEditorTickers();
   document.getElementById("editor-overlay").style.display = "block";
 }
@@ -466,6 +658,29 @@ function renderEditorTickers() {
   });
 }
 
+// ═══════════════════════════════════════════
+//  GLOBAL SETTINGS
+// ═══════════════════════════════════════════
+async function saveBaseCurrency() {
+  const input = document.getElementById("home-currency-input");
+  const val = input.value.toUpperCase().trim();
+  if (!val || val.length !== 3) return alert("Currency must be a 3-letter ISO code.");
+  try {
+    await fetch("/api/settings/GLOBAL_BASE_CURRENCY", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ value: val })
+    });
+    GLOBAL_BASE_CURRENCY = val;
+    state.cache = {};
+    state.fxCache = {};
+    // Stay on homepage; if they navigate to a list it will re-fetch
+  } catch (e) { alert("Error saving currency: " + e.message); }
+}
+
+// ═══════════════════════════════════════════
+//  TICKER CRUD
+// ═══════════════════════════════════════════
 async function refreshApp() {
   try {
     const res = await fetch('/api/init');
@@ -480,93 +695,19 @@ async function refreshApp() {
 
     buildSidebar();
 
-    if (state.activeList && LISTS[state.activeList]) {
-      // re-activate the current list
-      document.querySelectorAll(".list-btn").forEach(b => {
-        b.classList.toggle("active", b.dataset.list === state.activeList);
-      });
+    if (state.currentView === "home") {
+      renderHomepage();
+    } else if (state.activeList && LISTS[state.activeList]) {
       const list = LISTS[state.activeList];
       document.getElementById("page-title").textContent = list.name;
-      document.getElementById("header-tag").textContent = list.tag;
       document.getElementById("page-subtitle").textContent = list.description;
       loadData(state.activeList);
     } else {
-      const firstId = Object.keys(LISTS)[0];
-      if (firstId) switchList(firstId);
+      showHome();
     }
   } catch (e) {
     console.error("Failed to refresh:", e);
   }
-}
-
-async function saveBaseCurrency() {
-  const val = document.getElementById("ed-base-currency").value.toUpperCase().trim();
-  if (!val || val.length !== 3) return alert("Currency must be a 3-letter ISO code.");
-  try {
-    await fetch("/api/settings/GLOBAL_BASE_CURRENCY", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ value: val })
-    });
-    GLOBAL_BASE_CURRENCY = val;
-    state.cache = {};
-    state.fxCache = {};
-    closeEditor();
-    if (state.activeList) loadData(state.activeList);
-  } catch (e) { alert("Error saving currency: " + e.message); }
-}
-
-async function saveListMeta() {
-  const slug = state.activeList;
-  const body = {
-    name: document.getElementById("ed-list-name").value,
-    short_name: document.getElementById("ed-list-short").value,
-    category: document.getElementById("ed-list-category").value,
-    tag: document.getElementById("ed-list-tag").value,
-    description: document.getElementById("ed-list-desc").value,
-  };
-  try {
-    await fetch(`/api/lists/${slug}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body)
-    });
-    await refreshApp();
-    openEditor(); // re-open to show updated values
-  } catch (e) { alert("Error saving list: " + e.message); }
-}
-
-async function deleteList() {
-  const slug = state.activeList;
-  if (!confirm(`Delete the entire "${LISTS[slug].name}" list?`)) return;
-  try {
-    await fetch(`/api/lists/${slug}`, { method: "DELETE" });
-    state.activeList = null;
-    await refreshApp();
-    closeEditor();
-  } catch (e) { alert("Error deleting list: " + e.message); }
-}
-
-async function createList() {
-  const slug = document.getElementById("ed-new-slug").value.trim();
-  const name = document.getElementById("ed-new-name").value.trim();
-  const short_name = document.getElementById("ed-new-short").value.trim();
-  const category = document.getElementById("ed-new-category").value.trim() || "Other";
-  if (!slug || !name || !short_name) return alert("Slug, Name, and Short Name are required.");
-  try {
-    await fetch("/api/lists", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ slug, name, short_name, category, description: "", tag: "", currency: GLOBAL_BASE_CURRENCY })
-    });
-    document.getElementById("ed-new-slug").value = "";
-    document.getElementById("ed-new-name").value = "";
-    document.getElementById("ed-new-short").value = "";
-    document.getElementById("ed-new-category").value = "";
-    await refreshApp();
-    switchList(slug);
-    openEditor();
-  } catch (e) { alert("Error creating list: " + e.message); }
 }
 
 async function saveTicker(id, btn) {
@@ -581,12 +722,10 @@ async function saveTicker(id, btn) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body)
     });
-    // flash green on the save button
     btn.style.borderColor = "#38a169";
     btn.textContent = "✓";
     setTimeout(() => { btn.style.borderColor = "#68d391"; btn.textContent = "Save"; }, 800);
 
-    // update local state too
     const list = LISTS[state.activeList];
     const item = list.items.find(t => t.id === id);
     if (item) {
@@ -595,7 +734,6 @@ async function saveTicker(id, btn) {
       if (body.tag) item.tag = body.tag;
       if (body.currency) item.currency = body.currency;
     }
-    // clear the cache so data refreshes
     delete state.cache[state.activeList];
     state.fxCache = {};
   } catch (e) { alert("Error saving ticker: " + e.message); }
@@ -610,9 +748,6 @@ async function deleteTicker(id) {
     delete state.cache[state.activeList];
     renderEditorTickers();
     buildSidebar();
-    document.querySelectorAll(".list-btn").forEach(b => {
-      b.classList.toggle("active", b.dataset.list === state.activeList);
-    });
   } catch (e) { alert("Error deleting ticker: " + e.message); }
 }
 
@@ -638,9 +773,6 @@ async function addTicker() {
     delete state.cache[slug];
     renderEditorTickers();
     buildSidebar();
-    document.querySelectorAll(".list-btn").forEach(b => {
-      b.classList.toggle("active", b.dataset.list === state.activeList);
-    });
   } catch (e) { alert("Error adding ticker: " + e.message); }
 }
 
@@ -657,11 +789,10 @@ async function initApp() {
     GLOBAL_BASE_CURRENCY = data.settings.GLOBAL_BASE_CURRENCY || "USD";
 
     buildSidebar();
-    const firstListId = Object.keys(LISTS)[0];
-    switchList(firstListId);
+    showHome();
   } catch (e) {
-    document.getElementById("status-text").textContent = "Error loading data from server";
-    document.getElementById("status-bar").className = "s-err";
+    document.getElementById("view-home").style.display = "block";
+    document.getElementById("home-grid").innerHTML = `<div style="color:#fc8181;font-family:monospace;padding:20px;">Error loading data from server</div>`;
     console.error(e);
   }
 }
