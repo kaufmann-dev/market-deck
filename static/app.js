@@ -25,16 +25,23 @@ let GLOBAL_BASE_CURRENCY = "USD";
 function buildSidebar() {
   const nav = document.getElementById("sidebar");
   let html = `<button class="sidebar-home-btn${state.currentView === 'home' ? ' active' : ''}" onclick="showHome()">MarketDeck</button>`;
-  let lastCat = null;
+
+  const grouped = {};
   for (const [id, list] of Object.entries(LISTS)) {
-    if (list.category !== lastCat) {
-      html += `<div class="sidebar-section">${list.category}</div>`;
-      lastCat = list.category;
+    if (!grouped[list.category]) grouped[list.category] = [];
+    grouped[list.category].push({ id, list });
+  }
+
+  for (const cat in grouped) {
+    html += `<div class="sidebar-section">${cat}</div>`;
+    for (const item of grouped[cat]) {
+      const id = item.id;
+      const list = item.list;
+      html += `<button class="list-btn${state.activeList === id && state.currentView === 'list' ? ' active' : ''}" data-list="${id}" onclick="switchList('${id}')">
+        <span>${list.shortName}</span>
+        <span class="count">${list.items.length}</span>
+      </button>`;
     }
-    html += `<button class="list-btn${state.activeList === id && state.currentView === 'list' ? ' active' : ''}" data-list="${id}" onclick="switchList('${id}')">
-      <span>${list.shortName}</span>
-      <span class="count">${list.items.length}</span>
-    </button>`;
   }
   nav.innerHTML = html;
 }
@@ -199,6 +206,7 @@ function openListEditModal(slug) {
   document.getElementById("le-name").value = list.name;
   document.getElementById("le-short").value = list.shortName;
   document.getElementById("le-category").value = list.category;
+  document.getElementById("le-show-type").checked = list.showType !== false;
   document.getElementById("le-desc").value = list.description;
   document.querySelector("#list-edit-modal .btn-red").style.display = "";
   document.getElementById("list-edit-modal").style.display = "block";
@@ -215,6 +223,7 @@ function openCreateListModal() {
   document.getElementById("le-name").value = "";
   document.getElementById("le-short").value = "";
   document.getElementById("le-category").value = "";
+  document.getElementById("le-show-type").checked = true;
   document.getElementById("le-desc").value = "";
   // Hide delete button for new lists
   document.querySelector("#list-edit-modal .btn-red").style.display = "none";
@@ -225,6 +234,7 @@ async function saveListFromModal() {
   const name = document.getElementById("le-name").value.trim();
   const short_name = document.getElementById("le-short").value.trim();
   const category = document.getElementById("le-category").value.trim() || "Other";
+  const show_type = document.getElementById("le-show-type").checked;
   const description = document.getElementById("le-desc").value.trim();
 
   if (!name || !short_name) return alert("Name and Short Name are required.");
@@ -237,7 +247,7 @@ async function saveListFromModal() {
       await fetch("/api/lists", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ slug, name, short_name, category, description, tag: "", currency: GLOBAL_BASE_CURRENCY })
+        body: JSON.stringify({ slug, name, short_name, category, description, tag: "", currency: GLOBAL_BASE_CURRENCY, show_type })
       });
       closeListEditModal();
       await refreshApp();
@@ -248,7 +258,7 @@ async function saveListFromModal() {
       await fetch(`/api/lists/${_editingListSlug}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, short_name, category, description, tag: LISTS[_editingListSlug]?.tag || "" })
+        body: JSON.stringify({ name, short_name, category, description, tag: LISTS[_editingListSlug]?.tag || "", show_type })
       });
       closeListEditModal();
       await refreshApp();
@@ -564,6 +574,10 @@ function render() {
     </div>`;
   });
 
+  // Hide/Show 'Type' column header
+  const thType = document.getElementById("r-th-type");
+  if (thType) thType.style.display = list.showType === false ? "none" : "";
+
   document.getElementById("ret-hdr").textContent = state.lb + "M Return";
 
   // Rankings table
@@ -577,11 +591,12 @@ function render() {
     const barCol = s.score !== null && s.score >= 0 ? "#68d391" : "#fc8181";
     const priceStr = s.currentPrice ? sym + s.currentPrice.toFixed(2) : "—";
     const baseDateStr = s.baseDate ? s.baseDate.toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "";
+    const typeCellStyle = list.showType === false ? 'style="display:none"' : "";
     tbody.innerHTML += `<tr style="background:${rowBg};border-bottom:1px solid #1a202c">
       <td><span class="rb ${bCls}">${s.rank}</span></td>
       <td><div style="display:flex;align-items:center;gap:8px"><span>${s.name}</span></div></td>
       <td><span class="ticker">${s.ticker}</span></td>
-      <td><span class="tag" style="${getTagStyle(s.tag)}">${s.tag}</span></td>
+      <td ${typeCellStyle}><span class="tag" style="${getTagStyle(s.tag)}">${s.tag}</span></td>
       <td>
         <div class="bar-wrap">
           <div class="bar-track"><div class="bar-fill" style="width:${barPct}%;background:${barCol}"></div></div>

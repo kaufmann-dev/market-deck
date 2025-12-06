@@ -509,7 +509,7 @@ select {
   display: flex;
   align-items: center;
   gap: 16px;
-  margin-bottom: 8px;
+  margin-bottom: 24px;
   flex-wrap: wrap;
 }
 
@@ -697,7 +697,7 @@ select {
   background: var(--bg-surface-elevated) !important;
   border-color: var(--text-primary) !important;
   color: var(--text-primary) !important;
-  z-index: 1;
+  z-index: 2;
 }
 
 .banner {

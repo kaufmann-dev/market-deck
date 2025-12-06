@@ -30,7 +30,8 @@ def migrate():
             category    TEXT NOT NULL,
             description TEXT NOT NULL DEFAULT '',
             tag         TEXT NOT NULL DEFAULT '',
-            currency    TEXT NOT NULL DEFAULT 'USD'
+            currency    TEXT NOT NULL DEFAULT 'USD',
+            show_type   INTEGER NOT NULL DEFAULT 1
         );
         CREATE TABLE tickers (
             id            INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -56,8 +57,8 @@ def migrate():
 
     for slug, data in lists_data.items():
         c.execute("""
-            INSERT INTO watchlists (slug, name, short_name, category, description, tag, currency)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO watchlists (slug, name, short_name, category, description, tag, currency, show_type)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             slug,
             data.get("name", slug),
@@ -66,6 +67,7 @@ def migrate():
             data.get("description", ""),
             data.get("tag", ""),
             data.get("currency", "USD"),
+            data.get("showType", 1)  # Default for old config
         ))
         wl_id = c.lastrowid
         for i, item in enumerate(data.get("items", [])):
