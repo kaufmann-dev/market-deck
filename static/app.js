@@ -20,6 +20,21 @@ let state = {
 let GLOBAL_BASE_CURRENCY = "USD";
 
 // ═══════════════════════════════════════════
+//  MOBILE NAV
+// ═══════════════════════════════════════════
+function toggleMobileNav() {
+  document.getElementById("mobile-nav-toggle").classList.toggle("open");
+  document.getElementById("mobile-nav-backdrop").classList.toggle("open");
+  document.getElementById("sidebar").classList.toggle("open");
+}
+
+function closeMobileNav() {
+  document.getElementById("mobile-nav-toggle").classList.remove("open");
+  document.getElementById("mobile-nav-backdrop").classList.remove("open");
+  document.getElementById("sidebar").classList.remove("open");
+}
+
+// ═══════════════════════════════════════════
 //  SIDEBAR
 // ═══════════════════════════════════════════
 function buildSidebar() {
@@ -50,6 +65,7 @@ function buildSidebar() {
 //  NAVIGATION
 // ═══════════════════════════════════════════
 function showHome() {
+  closeMobileNav();
   state.currentView = "home";
   state.activeList = null;
   document.getElementById("view-home").style.display = "block";
@@ -60,6 +76,7 @@ function showHome() {
 }
 
 function switchList(id) {
+  closeMobileNav();
   state.currentView = "list";
   state.activeList = id;
 
@@ -697,19 +714,24 @@ function renderEditorTickers() {
 //  GLOBAL SETTINGS
 // ═══════════════════════════════════════════
 async function saveBaseCurrency() {
-  const input = document.getElementById("home-currency-input");
-  const val = input.value.toUpperCase().trim();
-  if (!val || val.length !== 3) return alert("Currency must be a 3-letter ISO code.");
+  const val = document.getElementById("home-currency-input").value;
   try {
     await fetch("/api/settings/GLOBAL_BASE_CURRENCY", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ value: val })
     });
+    // Also clear the server-side price cache so FX rates are fetched immediately
+    await fetch("/api/prices/cache", { method: "DELETE" });
+
     GLOBAL_BASE_CURRENCY = val;
     state.cache = {};
     state.fxCache = {};
-    // Stay on homepage; if they navigate to a list it will re-fetch
+
+    // If we're looking at a list, actively reload it
+    if (state.currentView === "list" && state.activeList) {
+      loadData(state.activeList);
+    }
   } catch (e) { alert("Error saving currency: " + e.message); }
 }
 
