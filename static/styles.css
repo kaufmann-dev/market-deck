@@ -10,15 +10,15 @@
 
 :root {
   /* Custom Scrollbar Colors */
-  --scrollbar-bg: #000000;
+  --scrollbar-bg: transparent;
   --scrollbar-thumb: #333333;
   --scrollbar-thumb-hover: #a0a0a0;
 
   /* Core Monochromatic Palette */
   --bg-base: #000000;
-  --bg-surface: #0a0a0a;
-  --bg-surface-elevated: #111111;
-  --bg-surface-hover: #1a1a1a;
+  --bg-surface: rgba(255, 255, 255, 0.05);
+  --bg-surface-elevated: rgba(255, 255, 255, 0.07);
+  --bg-surface-hover: rgba(255, 255, 255, 0.09);
 
   --border-subtle: #222222;
   --border-strong: #333333;
@@ -68,7 +68,11 @@
 
 body {
   font-family: 'Google Sans', -apple-system, BlinkMacSystemFont, sans-serif;
-  background: var(--bg-base);
+  background:
+    radial-gradient(circle at 80% 0%, rgba(75, 40, 150, 0.18) 0%, transparent 50%),
+    radial-gradient(circle at 10% 100%, rgba(15, 110, 140, 0.15) 0%, transparent 50%),
+    var(--bg-base);
+  background-attachment: fixed;
   color: var(--text-primary);
   display: flex;
   min-height: 100vh;
@@ -199,7 +203,7 @@ select {
   margin-bottom: 48px;
   flex-wrap: wrap;
   gap: 24px;
-  border-bottom: 1px solid var(--text-primary);
+  border-bottom: 1px solid var(--border-subtle);
   padding-bottom: 24px;
 }
 
@@ -251,7 +255,7 @@ select {
 }
 
 .home-currency select option {
-  background: var(--bg-surface);
+  background: #000000;
   color: var(--text-primary);
 }
 
@@ -770,7 +774,7 @@ select {
   display: flex;
   align-items: center;
   gap: 16px;
-  background: transparent;
+  background: rgba(0, 0, 0, 0.4);
   border: 1px solid var(--border-strong);
   padding: 12px 20px;
   border-radius: 0;
@@ -789,13 +793,14 @@ select {
 .table-wrap {
   overflow-x: auto;
   border-radius: 0;
-  border: 1px solid var(--border-subtle);
-  background: var(--bg-surface);
+  border: none;
+  background: transparent;
 }
 
 table {
   width: 100%;
   border-collapse: collapse;
+  margin-bottom: 5px;
 }
 
 th {
@@ -806,7 +811,7 @@ th {
   text-transform: uppercase;
   letter-spacing: 0.15em;
   color: var(--text-tertiary);
-  background: var(--bg-base);
+  background: transparent;
   border-bottom: 1px solid var(--border-subtle);
 }
 
@@ -817,7 +822,7 @@ td {
 }
 
 tr:hover td {
-  background: var(--bg-surface-hover);
+  background: rgba(255, 255, 255, 0.02);
 }
 
 .ticker {
@@ -923,9 +928,17 @@ tr:hover td {
 
   font-size: 11px;
   padding: 14px 10px;
-  border-left: 1px solid var(--border-subtle);
   border-bottom: 1px solid var(--border-subtle);
   font-weight: 400;
+}
+
+.heatmap-pill {
+  display: inline-block;
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-weight: 500;
+  font-family: 'Google Sans Code', monospace;
+  font-size: 11px;
 }
 
 .footer {
@@ -946,7 +959,7 @@ tr:hover td {
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  background: rgba(10, 10, 10, 0.92);
+  background: rgba(255, 255, 255, 0.04);
   backdrop-filter: var(--blur-glass);
   border: 1px solid var(--border-strong);
   border-radius: 0;
@@ -1185,7 +1198,7 @@ tr:hover td {
   bottom: 0;
   width: 560px;
   max-width: 100vw;
-  background: rgba(10, 10, 10, 0.85);
+  background: rgba(255, 255, 255, 0.04);
   backdrop-filter: var(--blur-glass);
   border-left: 1px solid var(--border-strong);
   overflow-y: auto;
@@ -1287,7 +1300,7 @@ tr:hover td {
 .ed-add-ticker-box {
   margin-top: 24px;
   padding: 24px;
-  background: var(--bg-surface);
+  background: rgba(0, 0, 0, 0.4);
   border: 1px solid var(--border-subtle);
   border-radius: 0;
 }
@@ -1476,7 +1489,6 @@ tr:hover td {
     height: 100vh;
     min-height: unset;
     z-index: 1050;
-    background: rgba(10, 10, 10, 0.92);
     backdrop-filter: var(--blur-glass);
     border-right: none;
     border-left: 1px solid var(--border-strong);
