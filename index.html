@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Momentum Rotation Model</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+
+<body>
+
+  <!-- ═══ Sidebar ═══ -->
+  <nav class="sidebar" id="sidebar"></nav>
+
+  <!-- ═══ Main Content ═══ -->
+  <div class="main">
+    <div class="header-row">
+      <h1 id="page-title">Momentum Rotation Model</h1>
+      <span class="header-tag" id="header-tag"></span>
+      <span id="updated-label" style="font-family:monospace;font-size:11px;color:#2d3748;margin-left:auto;"></span>
+    </div>
+    <p class="subtitle" id="page-subtitle"></p>
+
+    <div id="status-bar" class="s-load">
+      <div class="spinner"></div>
+      <span id="status-text">Select a list to begin…</span>
+    </div>
+
+    <div id="app">
+      <div class="controls">
+        <div class="cg">
+          <label>Lookback Period</label>
+          <div class="btn-group" id="lb-btns"></div>
+        </div>
+        <div class="cg">
+          <label>Top N Assets to Hold</label>
+          <div class="btn-group" id="tn-btns"></div>
+        </div>
+        <div class="cg" style="margin-left:auto;">
+          <label>View</label>
+          <div class="btn-group">
+            <button id="tab-r" class="a-purple" onclick="setView('r')">Rankings</button>
+            <button id="tab-h" onclick="setView('h')">Monthly Heatmap</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="banner">
+        <div class="banner-lbl" id="banner-lbl"></div>
+        <div class="holdings" id="holdings"></div>
+      </div>
+
+      <div id="view-r">
+        <div class="method-note" id="method-note"></div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Rank</th>
+                <th>Name</th>
+                <th>Ticker</th>
+                <th>Type</th>
+                <th id="ret-hdr">Return</th>
+                <th>Current Price</th>
+                <th>Signal</th>
+              </tr>
+            </thead>
+            <tbody id="r-body"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div id="view-h" style="display:none;">
+        <div class="method-note">Monthly returns: last trading day of each month (adjusted close).</div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr id="hm-hdr"></tr>
+            </thead>
+            <tbody id="hm-body"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="footer">
+        Source: Yahoo Finance daily adjusted close · Returns = (today's adj. close) / (adj. close on or just after the
+        same date N months ago) − 1 · Not financial advice
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+
+</html>

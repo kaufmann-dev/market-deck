@@ -1,0 +1,77 @@
+{
+    "Cyclical": {
+        "bg": "rgba(252, 129, 129, .1)",
+        "text": "#fc8181",
+        "border": "rgba(252, 129, 129, .3)"
+    },
+    "Defensive": {
+        "bg": "rgba(104, 211, 145, .1)",
+        "text": "#68d391",
+        "border": "rgba(104, 211, 145, .3)"
+    },
+    "North America": {
+        "bg": "rgba(99, 179, 237, .1)",
+        "text": "#63b3ed",
+        "border": "rgba(99, 179, 237, .3)"
+    },
+    "Europe": {
+        "bg": "rgba(246, 173, 85, .1)",
+        "text": "#f6ad55",
+        "border": "rgba(246, 173, 85, .3)"
+    },
+    "Asia": {
+        "bg": "rgba(167, 139, 250, .1)",
+        "text": "#a78bfa",
+        "border": "rgba(167, 139, 250, .3)"
+    },
+    "Latin America": {
+        "bg": "rgba(236, 72, 153, .1)",
+        "text": "#ec4899",
+        "border": "rgba(236, 72, 153, .3)"
+    },
+    "Middle East": {
+        "bg": "rgba(251, 191, 36, .1)",
+        "text": "#fbbf24",
+        "border": "rgba(251, 191, 36, .3)"
+    },
+    "Africa": {
+        "bg": "rgba(52, 211, 153, .1)",
+        "text": "#34d399",
+        "border": "rgba(52, 211, 153, .3)"
+    },
+    "Oceania": {
+        "bg": "rgba(45, 212, 191, .1)",
+        "text": "#2dd4bf",
+        "border": "rgba(45, 212, 191, .3)"
+    },
+    "Metals": {
+        "bg": "rgba(236, 201, 75, .1)",
+        "text": "#ecc94b",
+        "border": "rgba(236, 201, 75, .3)"
+    },
+    "Energy": {
+        "bg": "rgba(237, 137, 54, .1)",
+        "text": "#ed8936",
+        "border": "rgba(237, 137, 54, .3)"
+    },
+    "Carbon": {
+        "bg": "rgba(56, 178, 172, .1)",
+        "text": "#38b2ac",
+        "border": "rgba(56, 178, 172, .3)"
+    },
+    "Agriculture": {
+        "bg": "rgba(154, 230, 180, .1)",
+        "text": "#9ae6b4",
+        "border": "rgba(154, 230, 180, .3)"
+    },
+    "Livestock": {
+        "bg": "rgba(213, 63, 140, .1)",
+        "text": "#d53f8c",
+        "border": "rgba(213, 63, 140, .3)"
+    },
+    "Other": {
+        "bg": "rgba(160, 174, 192, .1)",
+        "text": "#a0aec0",
+        "border": "rgba(160, 174, 192, .3)"
+    }
+}
