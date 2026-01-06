@@ -1,4 +1,4 @@
-# Momentum Rotation Model
+# Market Deck
 
 A local dashboard for ranking financial assets (ETFs, stocks, commodities) by price momentum and visualizing monthly returns in a heatmap. Supports multiple watchlists, dynamic currency conversion, and live editing via a built-in editor panel.
 
