@@ -23,7 +23,7 @@ let state = {
   workingProxy: null,
 };
 
-const GLOBAL_BASE_CURRENCY = "USD";
+let GLOBAL_BASE_CURRENCY = "USD";
 
 // ═══════════════════════════════════════════
 //  SIDEBAR
@@ -192,8 +192,10 @@ async function loadData(listId) {
         .filter(c => c && c !== GLOBAL_BASE_CURRENCY)
     )];
 
-    let loaded = 0;
-    const total = list.items.length + foreignCurrencies.length;
+    let fxLoaded = 0;
+    let tickerLoaded = 0;
+    const fxTotal = foreignCurrencies.filter(c => c !== "USX").length;
+    const tickerTotal = list.items.length;
 
     // 2. Fetch Forex pairs alongside standard tickers
     const fetchPromises = [];
@@ -203,7 +205,6 @@ async function loadData(listId) {
       // e.g. "EURUSD=X"
       // If the currency is "USX" (US Cents), we handle it mathematically later, no need to fetch it
       if (cur === "USX") {
-        loaded++;
         return;
       }
 
@@ -216,17 +217,16 @@ async function loadData(listId) {
         fetchPromises.push(
           fetchTicker(fxTicker).then(data => {
             state.fxCache[fxTicker] = data;
-            loaded++;
+            fxLoaded++;
             if (state.activeList === listId) {
-              document.getElementById("status-text").textContent = `Loading Forex rates… ${loaded}/${total}`;
+              document.getElementById("status-text").textContent = `Loading FX rates… ${fxLoaded}/${fxTotal}`;
             }
           }).catch(() => {
             state.fxCache[fxTicker] = null;
-            loaded++;
+            fxLoaded++;
           })
         );
       } else {
-        loaded++;
       }
     });
 
@@ -235,13 +235,13 @@ async function loadData(listId) {
       fetchPromises.push(
         fetchTicker(s.ticker).then(data => {
           state.cache[listId][s.ticker] = data;
-          loaded++;
+          tickerLoaded++;
           if (state.activeList === listId) {
-            document.getElementById("status-text").textContent = `Loading ${list.shortName}… ${loaded}/${total} tickers`;
+            document.getElementById("status-text").textContent = `Loading ${list.shortName}… ${tickerLoaded}/${tickerTotal} tickers`;
           }
         }).catch(() => {
           state.cache[listId][s.ticker] = null;
-          loaded++;
+          tickerLoaded++;
         })
       );
     });
@@ -482,22 +482,246 @@ function render() {
 }
 
 // ═══════════════════════════════════════════
+//  EDITOR
+// ═══════════════════════════════════════════
+function openEditor() {
+  if (!state.activeList) return;
+  const slug = state.activeList;
+  const list = LISTS[slug];
+
+  document.getElementById("ed-base-currency").value = GLOBAL_BASE_CURRENCY;
+  document.getElementById("ed-list-slug").textContent = slug;
+  document.getElementById("ed-list-name").value = list.name;
+  document.getElementById("ed-list-short").value = list.shortName;
+  document.getElementById("ed-list-category").value = list.category;
+  document.getElementById("ed-list-tag").value = list.tag;
+  document.getElementById("ed-list-desc").value = list.description;
+
+  renderEditorTickers();
+  document.getElementById("editor-overlay").style.display = "block";
+}
+
+function closeEditor() {
+  document.getElementById("editor-overlay").style.display = "none";
+}
+
+function renderEditorTickers() {
+  const slug = state.activeList;
+  const list = LISTS[slug];
+  const container = document.getElementById("ed-tickers");
+  container.innerHTML = "";
+
+  list.items.forEach((t, i) => {
+    const row = document.createElement("div");
+    row.className = "ed-ticker-row";
+    row.innerHTML = `
+      <span style="color:#4a5568;font-family:monospace;font-size:10px;width:24px;">${i + 1}</span>
+      <input class="ed-sym" value="${t.ticker}" data-id="${t.id}" data-field="symbol" />
+      <input class="ed-name" value="${t.name}" data-id="${t.id}" data-field="name" />
+      <input class="ed-tag" value="${t.tag}" data-id="${t.id}" data-field="tag" />
+      <input class="ed-cur" value="${t.currency}" data-id="${t.id}" data-field="currency" maxlength="3" />
+      <button class="ed-btn-save" onclick="saveTicker(${t.id}, this)">Save</button>
+      <button class="ed-btn-del" onclick="deleteTicker(${t.id})">✕</button>
+    `;
+    container.appendChild(row);
+  });
+}
+
+async function refreshApp() {
+  try {
+    const res = await fetch('/api/init');
+    const data = await res.json();
+    LISTS = data.lists;
+    TAG_COLORS = data.tagColors;
+    GLOBAL_BASE_CURRENCY = data.settings.GLOBAL_BASE_CURRENCY || "USD";
+
+    // clear caches since data changed
+    state.cache = {};
+    state.fxCache = {};
+
+    buildSidebar();
+
+    if (state.activeList && LISTS[state.activeList]) {
+      // re-activate the current list
+      document.querySelectorAll(".list-btn").forEach(b => {
+        b.classList.toggle("active", b.dataset.list === state.activeList);
+      });
+      const list = LISTS[state.activeList];
+      document.getElementById("page-title").textContent = list.name;
+      document.getElementById("header-tag").textContent = list.tag;
+      document.getElementById("page-subtitle").textContent = list.description;
+      loadData(state.activeList);
+    } else {
+      const firstId = Object.keys(LISTS)[0];
+      if (firstId) switchList(firstId);
+    }
+  } catch (e) {
+    console.error("Failed to refresh:", e);
+  }
+}
+
+async function saveBaseCurrency() {
+  const val = document.getElementById("ed-base-currency").value.toUpperCase().trim();
+  if (!val || val.length !== 3) return alert("Currency must be a 3-letter ISO code.");
+  try {
+    await fetch("/api/settings/GLOBAL_BASE_CURRENCY", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ value: val })
+    });
+    GLOBAL_BASE_CURRENCY = val;
+    state.cache = {};
+    state.fxCache = {};
+    closeEditor();
+    if (state.activeList) loadData(state.activeList);
+  } catch (e) { alert("Error saving currency: " + e.message); }
+}
+
+async function saveListMeta() {
+  const slug = state.activeList;
+  const body = {
+    name: document.getElementById("ed-list-name").value,
+    short_name: document.getElementById("ed-list-short").value,
+    category: document.getElementById("ed-list-category").value,
+    tag: document.getElementById("ed-list-tag").value,
+    description: document.getElementById("ed-list-desc").value,
+  };
+  try {
+    await fetch(`/api/lists/${slug}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    });
+    await refreshApp();
+    openEditor(); // re-open to show updated values
+  } catch (e) { alert("Error saving list: " + e.message); }
+}
+
+async function deleteList() {
+  const slug = state.activeList;
+  if (!confirm(`Delete the entire "${LISTS[slug].name}" list?`)) return;
+  try {
+    await fetch(`/api/lists/${slug}`, { method: "DELETE" });
+    state.activeList = null;
+    await refreshApp();
+    closeEditor();
+  } catch (e) { alert("Error deleting list: " + e.message); }
+}
+
+async function createList() {
+  const slug = document.getElementById("ed-new-slug").value.trim();
+  const name = document.getElementById("ed-new-name").value.trim();
+  const short_name = document.getElementById("ed-new-short").value.trim();
+  const category = document.getElementById("ed-new-category").value.trim() || "Other";
+  if (!slug || !name || !short_name) return alert("Slug, Name, and Short Name are required.");
+  try {
+    await fetch("/api/lists", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ slug, name, short_name, category, description: "", tag: "", currency: GLOBAL_BASE_CURRENCY })
+    });
+    document.getElementById("ed-new-slug").value = "";
+    document.getElementById("ed-new-name").value = "";
+    document.getElementById("ed-new-short").value = "";
+    document.getElementById("ed-new-category").value = "";
+    await refreshApp();
+    switchList(slug);
+    openEditor();
+  } catch (e) { alert("Error creating list: " + e.message); }
+}
+
+async function saveTicker(id, btn) {
+  const row = btn.closest(".ed-ticker-row");
+  const body = {};
+  row.querySelectorAll("input[data-id]").forEach(inp => {
+    body[inp.dataset.field] = inp.value;
+  });
+  try {
+    await fetch(`/api/tickers/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    });
+    // flash green on the save button
+    btn.style.borderColor = "#38a169";
+    btn.textContent = "✓";
+    setTimeout(() => { btn.style.borderColor = "#68d391"; btn.textContent = "Save"; }, 800);
+
+    // update local state too
+    const list = LISTS[state.activeList];
+    const item = list.items.find(t => t.id === id);
+    if (item) {
+      if (body.symbol) item.ticker = body.symbol;
+      if (body.name) item.name = body.name;
+      if (body.tag) item.tag = body.tag;
+      if (body.currency) item.currency = body.currency;
+    }
+    // clear the cache so data refreshes
+    delete state.cache[state.activeList];
+    state.fxCache = {};
+  } catch (e) { alert("Error saving ticker: " + e.message); }
+}
+
+async function deleteTicker(id) {
+  if (!confirm("Remove this ticker?")) return;
+  try {
+    await fetch(`/api/tickers/${id}`, { method: "DELETE" });
+    const list = LISTS[state.activeList];
+    list.items = list.items.filter(t => t.id !== id);
+    delete state.cache[state.activeList];
+    renderEditorTickers();
+    buildSidebar();
+    document.querySelectorAll(".list-btn").forEach(b => {
+      b.classList.toggle("active", b.dataset.list === state.activeList);
+    });
+  } catch (e) { alert("Error deleting ticker: " + e.message); }
+}
+
+async function addTicker() {
+  const slug = state.activeList;
+  const symbol = document.getElementById("ed-add-symbol").value.trim();
+  const name = document.getElementById("ed-add-name").value.trim();
+  const tag = document.getElementById("ed-add-tag").value.trim();
+  const currency = document.getElementById("ed-add-cur").value.trim().toUpperCase() || "USD";
+  if (!symbol || !name) return alert("Symbol and Name are required.");
+  try {
+    const res = await fetch(`/api/lists/${slug}/tickers`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ symbol, name, tag, currency })
+    });
+    const data = await res.json();
+    LISTS[slug].items.push({ id: data.id, ticker: symbol, name, tag, currency });
+    document.getElementById("ed-add-symbol").value = "";
+    document.getElementById("ed-add-name").value = "";
+    document.getElementById("ed-add-tag").value = "";
+    document.getElementById("ed-add-cur").value = "";
+    delete state.cache[slug];
+    renderEditorTickers();
+    buildSidebar();
+    document.querySelectorAll(".list-btn").forEach(b => {
+      b.classList.toggle("active", b.dataset.list === state.activeList);
+    });
+  } catch (e) { alert("Error adding ticker: " + e.message); }
+}
+
+// ═══════════════════════════════════════════
 //  INIT
 // ═══════════════════════════════════════════
 async function initApp() {
   try {
-    const [resLists, resColors] = await Promise.all([
-      fetch('lists.json'),
-      fetch('colors.json')
-    ]);
-    LISTS = await resLists.json();
-    TAG_COLORS = await resColors.json();
+    const res = await fetch('/api/init');
+    const data = await res.json();
+
+    LISTS = data.lists;
+    TAG_COLORS = data.tagColors;
+    GLOBAL_BASE_CURRENCY = data.settings.GLOBAL_BASE_CURRENCY || "USD";
 
     buildSidebar();
     const firstListId = Object.keys(LISTS)[0];
     switchList(firstListId);
   } catch (e) {
-    document.getElementById("status-text").textContent = "Error loading lists.json or colors.json";
+    document.getElementById("status-text").textContent = "Error loading data from server";
     document.getElementById("status-bar").className = "s-err";
     console.error(e);
   }
