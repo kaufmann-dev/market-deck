@@ -227,6 +227,13 @@ def update_tag_color(tag: str, body: TagColorUpdate):
         conn.commit()
     return {"ok": True}
 
+@app.delete("/api/tag-colors/{tag}")
+def delete_tag_color(tag: str):
+    with get_db() as conn:
+        conn.execute("DELETE FROM tag_colors WHERE tag=?", (tag,))
+        conn.commit()
+    return {"ok": True}
+
 # ══════════════════════════════════════
 #  API: PRICES (server-side yfinance fetch)
 #  In-memory per-ticker cache with TTL
