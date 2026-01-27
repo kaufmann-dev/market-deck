@@ -2,19 +2,18 @@
 server.py – FastAPI backend serving static files + REST API for watchlist CRUD
 Run:  python server.py
 """
-import sqlite3, os, json, math
+import sqlite3, os, math
 from contextlib import contextmanager
-from datetime import datetime
+from pathlib import Path
 from fastapi import FastAPI, HTTPException
-from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from typing import Optional, List
 import yfinance as yf
 import pandas as pd
 
-APP_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.path.join(APP_DIR, "data.db")
+APP_DIR = Path(__file__).resolve().parent
+DB_PATH = APP_DIR / "data.db"
 
 app = FastAPI()
 
@@ -264,7 +263,24 @@ def _get_cached(ticker):
     return _price_cache[ticker]["data"]
 
 def _set_cached(ticker, data):
+    if data is None:
+        _price_cache.pop(ticker, None)
+        return
     _price_cache[ticker] = {"data": data, "ts": _time.time()}
+
+def _download_prices(tickers):
+    if not tickers:
+        return {}
+
+    df = yf.download(
+        tickers,
+        period="14mo",
+        interval="1d",
+        auto_adjust=True,
+        progress=False,
+        threads=False,
+    )
+    return _parse_df(df, tickers)
 
 def _parse_df(df, tickers):
     """Parse a yfinance DataFrame into {ticker: [{date, close}, ...]}"""
@@ -334,22 +350,29 @@ def fetch_prices(body: PricesRequest):
     # Only download tickers not in cache
     if need_fetch:
         try:
-            df = yf.download(
-                need_fetch,
-                period="14mo",
-                interval="1d",
-                auto_adjust=True,
-                progress=False,
-                threads=True,
-            )
-            fresh = _parse_df(df, need_fetch)
+            fresh = _download_prices(need_fetch)
+
+            missing = [ticker for ticker, data in fresh.items() if data is None]
+            for ticker in missing:
+                try:
+                    fresh[ticker] = _download_prices([ticker]).get(ticker)
+                except Exception as retry_error:
+                    print(f"yfinance retry error for {ticker}: {retry_error}")
+                    fresh[ticker] = None
+
             for t, data in fresh.items():
                 result[t] = data
                 _set_cached(t, data)
         except Exception as e:
             print(f"yfinance download error: {e}")
             for t in need_fetch:
-                result[t] = None
+                try:
+                    data = _download_prices([t]).get(t)
+                except Exception as retry_error:
+                    print(f"yfinance fallback error for {t}: {retry_error}")
+                    data = None
+                result[t] = data
+                _set_cached(t, data)
 
     for t in tickers:
         if t not in result:
@@ -370,13 +393,18 @@ def clear_price_cache():
 @app.get("/{path:path}")
 def serve_static(path: str):
     if not path or path == "/":
-        return FileResponse(os.path.join(APP_DIR, "index.html"))
-    # Check direct path first (e.g. index.html at root)
-    file_path = os.path.join(APP_DIR, path)
-    if os.path.isfile(file_path):
+        return FileResponse(APP_DIR / "index.html")
+
+    try:
+        file_path = (APP_DIR / path).resolve(strict=False)
+        file_path.relative_to(APP_DIR)
+    except ValueError:
+        raise HTTPException(404, "Not found")
+
+    if file_path.is_file():
         return FileResponse(file_path)
     # fallback to index.html for SPA-like behavior
-    return FileResponse(os.path.join(APP_DIR, "index.html"))
+    return FileResponse(APP_DIR / "index.html")
 
 # ══════════════════════════════════════
 #  RUN

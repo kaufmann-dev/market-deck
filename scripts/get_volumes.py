@@ -4,10 +4,11 @@ import pandas as pd
 import os
 
 def main():
-    # Use the directory where the script is located
-    base_dir = os.path.dirname(os.path.abspath(__file__))
-    json_path = os.path.join(base_dir, "lists.json")
-    output_path = os.path.join(base_dir, "volumes.json")
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    root_dir = os.path.dirname(script_dir)
+    data_dir = os.path.join(root_dir, "data")
+    json_path = os.path.join(data_dir, "lists.json")
+    output_path = os.path.join(data_dir, "volumes.json")
 
     if not os.path.exists(json_path):
         print(f"File not found: {json_path}")
