@@ -15,6 +15,14 @@
 
 <body>
 
+  <!-- ═══ Mobile Nav ═══ -->
+  <button id="mobile-nav-toggle" class="mobile-nav-toggle" onclick="toggleMobileNav()">
+    <span class="hamburger-line"></span>
+    <span class="hamburger-line"></span>
+    <span class="hamburger-line"></span>
+  </button>
+  <div id="mobile-nav-backdrop" class="mobile-nav-backdrop" onclick="closeMobileNav()"></div>
+
   <!-- ═══ Sidebar ═══ -->
   <nav class="sidebar" id="sidebar"></nav>
 
@@ -27,33 +35,41 @@
         <h1 class="home-title">MarketDeck</h1>
         <div class="home-currency">
           <label>Base Currency</label>
-          <input id="home-currency-input" type="text" maxlength="3" />
-          <button id="home-currency-save" onclick="saveBaseCurrency()">Save</button>
+          <select id="home-currency-input" onchange="saveBaseCurrency()">
+            <option value="USD">USD</option>
+            <option value="EUR">EUR</option>
+            <option value="GBP">GBP</option>
+            <option value="JPY">JPY</option>
+            <option value="CHF">CHF</option>
+            <option value="CAD">CAD</option>
+            <option value="AUD">AUD</option>
+            <option value="CNY">CNY</option>
+          </select>
         </div>
       </div>
 
       <div class="home-section-title">Watchlists</div>
       <div class="home-grid" id="home-grid"></div>
 
-      <div class="home-section-title" style="margin-top:32px;">Tag Colors</div>
-      <div class="home-section-desc">Set a base color for each tag. Background, text, and border are auto-generated.
-      </div>
-      <div id="tag-colors-editor"></div>
-      <div class="tag-add-row">
-        <input id="tag-new-name" type="text" placeholder="New tag name" />
-        <input id="tag-new-color" type="color" value="#68d391" />
-        <button onclick="addTagColor()">+ Add Tag</button>
+      <div class="tag-section">
+        <div class="home-section-title">Tag Colors</div>
+        <div id="tag-colors-editor"></div>
+        <div class="tag-add-row">
+          <input id="tag-new-name" type="text" placeholder="Tag name" />
+          <input id="tag-new-color" type="color" value="#68d391" />
+          <button onclick="addTagColor()">+ Add</button>
+        </div>
       </div>
     </div>
 
     <!-- ─── LIST VIEW ─── -->
     <div id="view-list" style="display:none;">
-      <div class="header-row">
+      <div class="list-topbar">
         <button class="breadcrumb-btn" onclick="showHome()">← Home</button>
-        <h1 id="page-title"></h1>
-        <span id="updated-label" style="font-family:monospace;font-size:11px;color:#2d3748;margin-left:auto;"></span>
+        <span id="updated-label" class="updated-label"></span>
         <button id="edit-btn" onclick="openEditor()" class="edit-tickers-btn">✎ Edit Tickers</button>
       </div>
+      <h1 id="page-title" class="list-title"></h1>
       <p class="subtitle" id="page-subtitle"></p>
 
       <div id="status-bar" class="s-load">
@@ -160,19 +176,47 @@
     <div onclick="closeListEditModal()"
       style="position:absolute;inset:0;background:rgba(0,0,0,.6);backdrop-filter:blur(4px);"></div>
     <div class="modal-box">
-      <h2 style="font-size:16px;color:#f7fafc;font-weight:600;margin-bottom:16px;" id="list-edit-title">Edit List</h2>
-      <div class="editor-fields">
-        <div class="ef-row"><label>Name</label><input id="le-name" type="text" /></div>
-        <div class="ef-row"><label>Short Name</label><input id="le-short" type="text" /></div>
-        <div class="ef-row"><label>Category</label><input id="le-category" type="text" /></div>
-        <div class="ef-row"><label>Show Type</label><input id="le-show-type" type="checkbox"
-            style="width: auto; margin-right: auto; cursor: pointer;" /></div>
-        <div class="ef-row"><label>Description</label><textarea id="le-desc" rows="2"></textarea></div>
+      <div class="modal-header">
+        <h2 id="list-edit-title">Edit List</h2>
+        <button onclick="closeListEditModal()" class="modal-close-btn">✕</button>
       </div>
-      <div style="display:flex;gap:10px;margin-top:16px;">
+
+      <div class="modal-fields">
+        <div class="modal-field-group">
+          <div class="modal-field">
+            <label for="le-name">Name</label>
+            <input id="le-name" type="text" placeholder="My Watchlist" />
+          </div>
+          <div class="modal-field">
+            <label for="le-short">Short Name</label>
+            <input id="le-short" type="text" placeholder="Short" />
+          </div>
+        </div>
+
+        <div class="modal-field-group">
+          <div class="modal-field">
+            <label for="le-category">Category</label>
+            <input id="le-category" type="text" placeholder="ETFs" />
+          </div>
+          <div class="modal-field modal-field-toggle">
+            <label>Show Type Column</label>
+            <label class="toggle-switch">
+              <input id="le-show-type" type="checkbox" />
+              <span class="toggle-track"></span>
+            </label>
+          </div>
+        </div>
+
+        <div class="modal-field modal-field-full">
+          <label for="le-desc">Description</label>
+          <textarea id="le-desc" rows="3" placeholder="Optional description…"></textarea>
+        </div>
+      </div>
+
+      <div class="modal-actions">
         <button onclick="saveListFromModal()" class="btn-green">Save</button>
         <button onclick="closeListEditModal()" class="btn-muted">Cancel</button>
-        <button onclick="deleteListFromModal()" class="btn-red" style="margin-left:auto;">Delete List</button>
+        <button onclick="deleteListFromModal()" class="btn-red">Delete List</button>
       </div>
     </div>
   </div>
