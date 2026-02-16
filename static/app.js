@@ -85,6 +85,15 @@ function resetDataCaches() {
   state.fxCache = {};
 }
 
+function normalizeCategoryValue(category) {
+  const cleaned = String(category ?? "").trim().replace(/\s+/g, " ");
+  return cleaned || "Other";
+}
+
+function categoryKey(category) {
+  return normalizeCategoryValue(category).toLocaleLowerCase();
+}
+
 // ═══════════════════════════════════════════
 //  MOBILE NAV
 // ═══════════════════════════════════════════
@@ -109,13 +118,15 @@ function buildSidebar() {
 
   const grouped = {};
   for (const [id, list] of Object.entries(LISTS)) {
-    if (!grouped[list.category]) grouped[list.category] = [];
-    grouped[list.category].push({ id, list });
+    const label = normalizeCategoryValue(list.category);
+    const key = categoryKey(label);
+    if (!grouped[key]) grouped[key] = { label, items: [] };
+    grouped[key].items.push({ id, list });
   }
 
-  for (const cat in grouped) {
-    html += `<div class="sidebar-section">${escapeHtml(cat)}</div>`;
-    for (const item of grouped[cat]) {
+  for (const group of Object.values(grouped)) {
+    html += `<div class="sidebar-section">${escapeHtml(group.label)}</div>`;
+    for (const item of group.items) {
       const id = item.id;
       const list = item.list;
       html += `<button class="list-btn${state.activeList === id && state.currentView === 'list' ? ' active' : ''}" data-list="${escapeAttr(id)}" onclick="switchList('${escapeJsString(id)}')">
@@ -320,7 +331,7 @@ function openCreateListModal() {
 async function saveListFromModal() {
   const name = document.getElementById("le-name").value.trim();
   const short_name = document.getElementById("le-short").value.trim();
-  const category = document.getElementById("le-category").value.trim() || "Other";
+  const category = normalizeCategoryValue(document.getElementById("le-category").value);
   const show_type = document.getElementById("le-show-type").checked;
   const description = document.getElementById("le-desc").value.trim();
 
