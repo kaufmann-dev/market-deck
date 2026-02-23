@@ -15,6 +15,7 @@ let state = {
   cache: {},       // { listId: { ticker: [points] } }
   fxCache: {},     // { "EURUSD=X": [points], etc }
   currentView: "home",   // "home" or "list"
+  typeFilter: "All",
 };
 
 let GLOBAL_BASE_CURRENCY = "USD";
@@ -82,6 +83,8 @@ function switchList(id) {
 
   document.getElementById("view-home").style.display = "none";
   document.getElementById("view-list").style.display = "block";
+
+  state.typeFilter = "All"; // Reset filter on list switch
 
   buildSidebar();
 
@@ -486,6 +489,11 @@ function setView(v) {
   document.getElementById("tab-h").className = v === "h" ? "a-purple" : "";
 }
 
+function setTypeFilter(val) {
+  state.typeFilter = val;
+  render();
+}
+
 // ═══════════════════════════════════════════
 //  COMPUTE & RENDER
 // ═══════════════════════════════════════════
@@ -602,14 +610,14 @@ function render() {
   tbody.innerHTML = "";
   all.forEach((s, i) => {
     const isBuy = s.rank <= state.topN && s.score !== null;
-    const rowBg = isBuy ? "rgba(104,211,145,.04)" : (i % 2 === 0 ? "#0a0a0a" : "#111111");
+    const rowBg = isBuy ? "rgba(255, 255, 255, 0.03)" : "transparent";
     const bCls = isBuy ? "rb-buy" : (s.rank <= state.topN + 2 ? "rb-near" : "rb-rest");
     const barPct = s.score !== null ? Math.min(Math.abs(s.score) / 25 * 100, 100) : 0;
     const barCol = s.score !== null && s.score >= 0 ? "#68d391" : "#fc8181";
     const priceStr = s.currentPrice ? sym + s.currentPrice.toFixed(2) : "—";
     const baseDateStr = s.baseDate ? s.baseDate.toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "";
     const typeCellStyle = list.showType === false ? 'style="display:none"' : "";
-    tbody.innerHTML += `<tr style="background:${rowBg};border-bottom:1px solid #1a202c">
+    tbody.innerHTML += `<tr style="background:${rowBg}">
       <td><span class="rb ${bCls}">${s.rank}</span></td>
       <td><div style="display:flex;align-items:center;gap:8px"><span>${s.name}</span></div></td>
       <td><span class="ticker">${s.ticker}</span></td>
@@ -629,30 +637,31 @@ function render() {
   // Heatmap
   const allMonthLabels = ranked[0]?.monthly?.map(m => m.label) || [];
   const hmHdr = document.getElementById("hm-hdr");
-  hmHdr.innerHTML = `<th style="font-family:'Google Sans Code', monospace;padding:16px 20px;text-align:left;background:var(--bg-base);border-bottom:1px solid var(--border-subtle);font-size:10px;color:var(--text-tertiary);text-transform:uppercase;letter-spacing:.15em;min-width:165px">Name</th>`;
+  hmHdr.innerHTML = `<th style="font-family:'Google Sans Code', monospace;padding:16px 20px;text-align:left;background:transparent;border-bottom:1px solid var(--border-subtle);font-size:10px;color:var(--text-tertiary);text-transform:uppercase;letter-spacing:.15em;min-width:165px">Name</th>`;
   allMonthLabels.forEach(m => {
-    hmHdr.innerHTML += `<th style="font-family:'Google Sans Code', monospace;padding:16px 6px;text-align:center;background:var(--bg-base);border-bottom:1px solid var(--border-subtle);border-left:1px solid var(--border-subtle);font-size:10px;color:var(--text-tertiary);text-transform:uppercase;min-width:48px">${m}</th>`;
+    hmHdr.innerHTML += `<th style="font-family:'Google Sans Code', monospace;padding:16px 6px;text-align:center;background:transparent;border-bottom:1px solid var(--border-subtle);font-size:10px;color:var(--text-tertiary);text-transform:uppercase;min-width:48px">${m}</th>`;
   });
-  hmHdr.innerHTML += `<th style="font-family:'Google Sans Code', monospace;padding:16px 10px;text-align:center;background:var(--bg-base);border-bottom:1px solid var(--border-subtle);border-left:1px solid var(--border-subtle);font-size:10px;color:var(--accent-positive);text-transform:uppercase;letter-spacing:.15em">12M</th>`;
+  hmHdr.innerHTML += `<th style="font-family:'Google Sans Code', monospace;padding:16px 10px;text-align:center;background:transparent;border-bottom:1px solid var(--border-subtle);font-size:10px;color:var(--accent-positive);text-transform:uppercase;letter-spacing:.15em">12M</th>`;
 
   const hmBody = document.getElementById("hm-body");
   hmBody.innerHTML = "";
   all.forEach((s, i) => {
     const isBuy = s.rank <= state.topN && s.score !== null;
-    const rowBg = isBuy ? "rgba(104,211,145,.04)" : (i % 2 === 0 ? "#0a0a0a" : "#111111");
+    const rowBg = isBuy ? "rgba(255, 255, 255, 0.03)" : "transparent";
     const total12m = s.ret12m;
     let cells = "";
     if (s.monthly.length > 0) {
       s.monthly.forEach(m => {
-        const bg = m.ret !== null ? retBgColor(m.ret) + "22" : "#1a202c";
+        const bg = m.ret !== null ? retBgColor(m.ret) + "22" : "transparent";
         const tc = m.ret !== null ? retBgColor(m.ret) : "#4a5568";
-        cells += `<td class="hm-cell" style="background:${bg};color:${tc}">${m.ret !== null ? (m.ret > 0 ? "+" : "") + m.ret.toFixed(1) : "—"}</td>`;
+        const valStr = m.ret !== null ? (m.ret > 0 ? "+" : "") + m.ret.toFixed(1) : "—";
+        cells += `<td class="hm-cell"><span class="heatmap-pill" style="background:${bg};color:${tc}">${valStr}</span></td>`;
       });
     } else {
       cells = `<td colspan="${allMonthLabels.length}" style="text-align:center;color:#4a5568;font-size:12px;padding:10px">No data</td>`;
     }
-    hmBody.innerHTML += `<tr style="border-bottom:1px solid var(--border-subtle)">
-      <td style="padding:14px 20px;background:${rowBg};white-space:nowrap;border-bottom:1px solid var(--border-subtle)">
+    hmBody.innerHTML += `<tr style="border-bottom:1px solid var(--border-subtle); background:${rowBg}">
+      <td style="padding:14px 20px;white-space:nowrap;border-bottom:1px solid var(--border-subtle)">
         <div style="display:flex;align-items:center;gap:8px">
           <div>
             <div class="ticker" style="font-size:12px">${s.ticker}</div>
@@ -661,7 +670,7 @@ function render() {
         </div>
       </td>
       ${cells}
-      <td style="padding:14px 20px;text-align:center;background:var(--bg-base);border-left:1px solid var(--border-subtle);border-bottom:1px solid var(--border-subtle);font-family:'Google Sans Code', monospace;font-size:12px;color:${retTextColor(total12m)}">${total12m !== null ? fmtPct(total12m) : "—"}</td>
+      <td style="padding:14px 20px;text-align:center;background:transparent;border-bottom:1px solid var(--border-subtle);font-family:'Google Sans Code', monospace;font-size:12px;color:${retTextColor(total12m)}">${total12m !== null ? fmtPct(total12m) : "—"}</td>
     </tr>`;
   });
 
