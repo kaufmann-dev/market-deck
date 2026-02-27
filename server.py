@@ -52,6 +52,7 @@ class WatchlistCreate(BaseModel):
     description: str = ""
     tag: str = ""
     currency: str = "USD"
+    show_type: bool = True
 
 class WatchlistUpdate(BaseModel):
     name: Optional[str] = None
@@ -60,6 +61,7 @@ class WatchlistUpdate(BaseModel):
     description: Optional[str] = None
     tag: Optional[str] = None
     currency: Optional[str] = None
+    show_type: Optional[bool] = None
 
 class SettingUpdate(BaseModel):
     value: str
@@ -109,6 +111,7 @@ def api_init():
                 "description": wl["description"],
                 "tag": wl["tag"],
                 "currency": wl["currency"],
+                "showType": bool(wl["show_type"]),
                 "items": tickers,
             }
 
@@ -137,9 +140,9 @@ def create_list(body: WatchlistCreate):
     with get_db() as conn:
         try:
             cur = conn.execute("""
-                INSERT INTO watchlists (slug, name, short_name, category, description, tag, currency)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            """, (body.slug, body.name, body.short_name, body.category, body.description, body.tag, body.currency))
+                INSERT INTO watchlists (slug, name, short_name, category, description, tag, currency, show_type)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (body.slug, body.name, body.short_name, body.category, body.description, body.tag, body.currency, int(body.show_type)))
             conn.commit()
             return {"id": cur.lastrowid, "slug": body.slug}
         except sqlite3.IntegrityError:
@@ -155,9 +158,15 @@ def update_list(slug: str, body: WatchlistUpdate):
         if not updates:
             raise HTTPException(400, "No fields to update")
         # map short_name -> short_name column
-        col_map = {"short_name": "short_name"}
+        col_map = {"short_name": "short_name", "show_type": "show_type"}
+        
+        # Format boolean mappings to 1/0 for sqlite
+        def _map_val(k, v):
+            if k == "show_type": return int(v)
+            return v
+            
         set_clause = ", ".join(f"{col_map.get(k,k)}=?" for k in updates)
-        vals = list(updates.values()) + [slug]
+        vals = [_map_val(k, v) for k, v in updates.items()] + [slug]
         conn.execute(f"UPDATE watchlists SET {set_clause} WHERE slug=?", vals)
         conn.commit()
     return {"ok": True}
