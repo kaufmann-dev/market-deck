@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Momentum Rotation Model</title>
+  <title>MarketDeck</title>
   <link rel="stylesheet" href="static/styles.css" />
 </head>
 
@@ -15,168 +15,158 @@
 
   <!-- ═══ Main Content ═══ -->
   <div class="main">
-    <div class="header-row">
-      <h1 id="page-title">Momentum Rotation Model</h1>
-      <span class="header-tag" id="header-tag"></span>
-      <span id="updated-label" style="font-family:monospace;font-size:11px;color:#2d3748;margin-left:auto;"></span>
-      <button id="edit-btn" onclick="openEditor()"
-        style="margin-left:12px;padding:6px 16px;border-radius:6px;font-size:12px;cursor:pointer;font-family:monospace;border:1px solid #a78bfa;background:rgba(167,139,250,.15);color:#a78bfa;">✎
-        Edit</button>
-    </div>
-    <p class="subtitle" id="page-subtitle"></p>
 
-    <div id="status-bar" class="s-load">
-      <div class="spinner"></div>
-      <span id="status-text">Select a list to begin…</span>
+    <!-- ─── HOMEPAGE VIEW ─── -->
+    <div id="view-home" style="display:none;">
+      <div class="home-header">
+        <h1 class="home-title">MarketDeck</h1>
+        <div class="home-currency">
+          <label>Base Currency</label>
+          <input id="home-currency-input" type="text" maxlength="3" />
+          <button id="home-currency-save" onclick="saveBaseCurrency()">Save</button>
+        </div>
+      </div>
+
+      <div class="home-section-title">Watchlists</div>
+      <div class="home-grid" id="home-grid"></div>
+
+      <div class="home-section-title" style="margin-top:32px;">Tag Colors</div>
+      <div class="home-section-desc">Set a base color for each tag. Background, text, and border are auto-generated.
+      </div>
+      <div id="tag-colors-editor"></div>
+      <div class="tag-add-row">
+        <input id="tag-new-name" type="text" placeholder="New tag name" />
+        <input id="tag-new-color" type="color" value="#68d391" />
+        <button onclick="addTagColor()">+ Add Tag</button>
+      </div>
     </div>
 
-    <div id="app">
-      <div class="controls">
-        <div class="cg">
-          <label>Lookback Period</label>
-          <div class="btn-group" id="lb-btns"></div>
-        </div>
-        <div class="cg">
-          <label>Top N Assets to Hold</label>
-          <div class="btn-group" id="tn-btns"></div>
-        </div>
-        <div class="cg" style="margin-left:auto;">
-          <label>View</label>
-          <div class="btn-group">
-            <button id="tab-r" class="a-purple" onclick="setView('r')">Rankings</button>
-            <button id="tab-h" onclick="setView('h')">Monthly Heatmap</button>
+    <!-- ─── LIST VIEW ─── -->
+    <div id="view-list" style="display:none;">
+      <div class="header-row">
+        <button class="breadcrumb-btn" onclick="showHome()">← Home</button>
+        <h1 id="page-title"></h1>
+        <span id="updated-label" style="font-family:monospace;font-size:11px;color:#2d3748;margin-left:auto;"></span>
+        <button id="edit-btn" onclick="openEditor()" class="edit-tickers-btn">✎ Edit Tickers</button>
+      </div>
+      <p class="subtitle" id="page-subtitle"></p>
+
+      <div id="status-bar" class="s-load">
+        <div class="spinner"></div>
+        <span id="status-text">Select a list to begin…</span>
+      </div>
+
+      <div id="app">
+        <div class="controls">
+          <div class="cg">
+            <label>Lookback Period</label>
+            <div class="btn-group" id="lb-btns"></div>
+          </div>
+          <div class="cg">
+            <label>Top N Assets to Hold</label>
+            <div class="btn-group" id="tn-btns"></div>
+          </div>
+          <div class="cg" style="margin-left:auto;">
+            <label>View</label>
+            <div class="btn-group">
+              <button id="tab-r" class="a-purple" onclick="setView('r')">Rankings</button>
+              <button id="tab-h" onclick="setView('h')">Monthly Heatmap</button>
+            </div>
           </div>
         </div>
-      </div>
 
-      <div class="banner">
-        <div class="banner-lbl" id="banner-lbl"></div>
-        <div class="holdings" id="holdings"></div>
-      </div>
-
-      <div id="view-r">
-        <div class="method-note" id="method-note"></div>
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Rank</th>
-                <th>Name</th>
-                <th>Ticker</th>
-                <th>Type</th>
-                <th id="ret-hdr">Return</th>
-                <th>Current Price</th>
-                <th>Signal</th>
-              </tr>
-            </thead>
-            <tbody id="r-body"></tbody>
-          </table>
+        <div class="banner">
+          <div class="banner-lbl" id="banner-lbl"></div>
+          <div class="holdings" id="holdings"></div>
         </div>
-      </div>
 
-      <div id="view-h" style="display:none;">
-        <div class="method-note">Monthly returns: last trading day of each month (adjusted close).</div>
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr id="hm-hdr"></tr>
-            </thead>
-            <tbody id="hm-body"></tbody>
-          </table>
+        <div id="view-r">
+          <div class="method-note" id="method-note"></div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Rank</th>
+                  <th>Name</th>
+                  <th>Ticker</th>
+                  <th>Type</th>
+                  <th id="ret-hdr">Return</th>
+                  <th>Current Price</th>
+                  <th>Signal</th>
+                </tr>
+              </thead>
+              <tbody id="r-body"></tbody>
+            </table>
+          </div>
         </div>
-      </div>
 
-      <div class="footer">
-        Source: Yahoo Finance daily adjusted close · Returns = (today's adj. close) / (adj. close on or just after the
-        same date N months ago) − 1 · Not financial advice
+        <div id="view-h" style="display:none;">
+          <div class="method-note">Monthly returns: last trading day of each month (adjusted close).</div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr id="hm-hdr"></tr>
+              </thead>
+              <tbody id="hm-body"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="footer">
+          Source: Yahoo Finance daily adjusted close · Returns = (today's adj. close) / (adj. close on or just after the
+          same date N months ago) − 1 · Not financial advice
+        </div>
       </div>
     </div>
+
   </div>
 
-  <!-- ═══ Editor Overlay ═══ -->
+  <!-- ═══ Ticker Editor Overlay (simplified) ═══ -->
   <div id="editor-overlay" style="display:none;position:fixed;inset:0;z-index:1000;">
     <div id="editor-backdrop" onclick="closeEditor()"
       style="position:absolute;inset:0;background:rgba(0,0,0,.6);backdrop-filter:blur(4px);"></div>
-    <div id="editor-panel"
-      style="position:absolute;right:0;top:0;bottom:0;width:520px;max-width:100vw;background:#0f1419;border-left:1px solid #21262d;overflow-y:auto;padding:28px;display:flex;flex-direction:column;gap:24px;">
+    <div id="editor-panel">
 
       <div style="display:flex;justify-content:space-between;align-items:center;">
-        <h2 style="font-size:18px;color:#f7fafc;font-weight:600;">Editor</h2>
-        <button onclick="closeEditor()"
-          style="background:none;border:1px solid #2d3748;color:#718096;padding:4px 12px;border-radius:6px;cursor:pointer;font-family:monospace;">✕
-          Close</button>
+        <h2 style="font-size:18px;color:#f7fafc;font-weight:600;">Edit Tickers</h2>
+        <button onclick="closeEditor()" class="editor-close-btn">✕ Close</button>
       </div>
 
-      <!-- Global Settings -->
       <div class="editor-section">
-        <div class="editor-section-title">Global Settings</div>
-        <div style="display:flex;gap:10px;align-items:center;">
-          <label style="font-family:monospace;font-size:12px;color:#718096;white-space:nowrap;">Base Currency</label>
-          <input id="ed-base-currency" type="text" maxlength="3"
-            style="width:70px;padding:6px 10px;background:#161b22;border:1px solid #2d3748;border-radius:6px;color:#e2e8f0;font-family:monospace;font-size:13px;text-transform:uppercase;" />
-          <button onclick="saveBaseCurrency()"
-            style="padding:6px 14px;border-radius:6px;border:1px solid #68d391;background:rgba(104,211,145,.15);color:#68d391;font-family:monospace;font-size:12px;cursor:pointer;">Save</button>
-        </div>
-      </div>
-
-      <!-- List Metadata -->
-      <div class="editor-section">
-        <div class="editor-section-title">List: <span id="ed-list-slug" style="color:#63b3ed;"></span></div>
-        <div class="editor-fields">
-          <div class="ef-row"><label>Name</label><input id="ed-list-name" type="text" /></div>
-          <div class="ef-row"><label>Short Name</label><input id="ed-list-short" type="text" /></div>
-          <div class="ef-row"><label>Category</label><input id="ed-list-category" type="text" /></div>
-          <div class="ef-row"><label>Tag</label><input id="ed-list-tag" type="text" /></div>
-          <div class="ef-row"><label>Description</label><textarea id="ed-list-desc" rows="2"></textarea></div>
-        </div>
-        <div style="display:flex;gap:10px;margin-top:10px;">
-          <button onclick="saveListMeta()"
-            style="padding:6px 14px;border-radius:6px;border:1px solid #68d391;background:rgba(104,211,145,.15);color:#68d391;font-family:monospace;font-size:12px;cursor:pointer;">Save
-            List Info</button>
-          <button onclick="deleteList()"
-            style="padding:6px 14px;border-radius:6px;border:1px solid #e53e3e;background:rgba(229,62,62,.1);color:#fc8181;font-family:monospace;font-size:12px;cursor:pointer;margin-left:auto;">Delete
-            List</button>
-        </div>
-      </div>
-
-      <!-- Add New List -->
-      <div class="editor-section">
-        <div class="editor-section-title">Create New List</div>
-        <div class="editor-fields">
-          <div class="ef-row"><label>Slug (ID)</label><input id="ed-new-slug" type="text" placeholder="my-stocks" />
-          </div>
-          <div class="ef-row"><label>Name</label><input id="ed-new-name" type="text" placeholder="My Stock List" />
-          </div>
-          <div class="ef-row"><label>Short Name</label><input id="ed-new-short" type="text" placeholder="My Stocks" />
-          </div>
-          <div class="ef-row"><label>Category</label><input id="ed-new-category" type="text" placeholder="Stocks" />
-          </div>
-        </div>
-        <button onclick="createList()"
-          style="margin-top:10px;padding:6px 14px;border-radius:6px;border:1px solid #63b3ed;background:rgba(99,179,237,.15);color:#63b3ed;font-family:monospace;font-size:12px;cursor:pointer;">+
-          Create List</button>
-      </div>
-
-      <!-- Tickers -->
-      <div class="editor-section">
-        <div class="editor-section-title">Tickers</div>
+        <div class="editor-section-title">Tickers in <span id="ed-list-name-label" style="color:#63b3ed;"></span></div>
         <div id="ed-tickers"></div>
-        <div style="margin-top:14px;padding:14px;background:#161b22;border:1px solid #21262d;border-radius:8px;">
-          <div
-            style="font-family:monospace;font-size:11px;color:#4a5568;text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px;">
-            Add Ticker</div>
+        <div class="ed-add-ticker-box">
+          <div class="editor-section-title" style="margin-bottom:10px;">Add Ticker</div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;">
             <input id="ed-add-symbol" type="text" placeholder="AAPL" style="width:90px;" />
             <input id="ed-add-name" type="text" placeholder="Apple Inc." style="flex:1;min-width:100px;" />
             <input id="ed-add-tag" type="text" placeholder="Tag" style="width:80px;" />
             <input id="ed-add-cur" type="text" placeholder="USD" style="width:60px;" maxlength="3" />
-            <button onclick="addTicker()"
-              style="padding:6px 14px;border-radius:6px;border:1px solid #68d391;background:rgba(104,211,145,.15);color:#68d391;font-family:monospace;font-size:12px;cursor:pointer;white-space:nowrap;">+
-              Add</button>
+            <button onclick="addTicker()" class="ed-btn-save" style="white-space:nowrap;">+ Add</button>
           </div>
         </div>
       </div>
 
+    </div>
+  </div>
+
+  <!-- ═══ List Edit Modal ═══ -->
+  <div id="list-edit-modal" style="display:none;position:fixed;inset:0;z-index:1000;">
+    <div onclick="closeListEditModal()"
+      style="position:absolute;inset:0;background:rgba(0,0,0,.6);backdrop-filter:blur(4px);"></div>
+    <div class="modal-box">
+      <h2 style="font-size:16px;color:#f7fafc;font-weight:600;margin-bottom:16px;" id="list-edit-title">Edit List</h2>
+      <div class="editor-fields">
+        <div class="ef-row"><label>Name</label><input id="le-name" type="text" /></div>
+        <div class="ef-row"><label>Short Name</label><input id="le-short" type="text" /></div>
+        <div class="ef-row"><label>Category</label><input id="le-category" type="text" /></div>
+        <div class="ef-row"><label>Description</label><textarea id="le-desc" rows="2"></textarea></div>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:16px;">
+        <button onclick="saveListFromModal()" class="btn-green">Save</button>
+        <button onclick="closeListEditModal()" class="btn-muted">Cancel</button>
+        <button onclick="deleteListFromModal()" class="btn-red" style="margin-left:auto;">Delete List</button>
+      </div>
     </div>
   </div>
 
