@@ -274,14 +274,27 @@ def _parse_df(df, tickers):
 
     if len(tickers) == 1:
         ticker = tickers[0]
-        if "Close" in df.columns:
-            closes = df["Close"].dropna()
+        # For a single ticker, yfinance sometimes returns a Series if only one column is requested,
+        # or a DataFrame without the MultiIndex.
+        try:
+            if isinstance(df, pd.DataFrame) and "Close" in df.columns:
+                closes = df["Close"].dropna()
+            elif hasattr(df, "Close"):
+                closes = df.Close.dropna()
+            elif isinstance(df, pd.Series):
+                closes = df.dropna()
+            else:
+                closes = []
+                
             points = []
-            for date, close in closes.items():
-                if not math.isnan(close):
-                    points.append({"date": date.strftime("%Y-%m-%d"), "close": round(float(close), 4)})
+            if hasattr(closes, 'items'):
+                for date, close in closes.items():
+                    if not math.isnan(close):
+                        points.append({"date": date.strftime("%Y-%m-%d"), "close": round(float(close), 4)})
+            
             result[ticker] = points if points else None
-        else:
+        except Exception as e:
+            print(f"Error parsing single ticker {ticker}: {e}")
             result[ticker] = None
     else:
         for ticker in tickers:
@@ -343,6 +356,12 @@ def fetch_prices(body: PricesRequest):
             result[t] = None
 
     return result
+
+@app.delete("/api/prices/cache")
+def clear_price_cache():
+    global _price_cache
+    _price_cache.clear()
+    return {"ok": True}
 
 # ══════════════════════════════════════
 #  STATIC FILES (serve index.html + assets)
