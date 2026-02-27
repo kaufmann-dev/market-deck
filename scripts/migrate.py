@@ -9,6 +9,10 @@ DB_PATH = os.path.join(ROOT_DIR, "data.db")
 LISTS_PATH = os.path.join(ROOT_DIR, "data", "lists.json")
 COLORS_PATH = os.path.join(ROOT_DIR, "data", "colors.json")
 
+def normalize_category(category):
+    cleaned = " ".join(str(category or "").split())
+    return (cleaned or "Other").upper()
+
 def migrate():
     if os.path.exists(DB_PATH):
         os.remove(DB_PATH)
@@ -63,7 +67,7 @@ def migrate():
             slug,
             data.get("name", slug),
             data.get("shortName", slug),
-            data.get("category", "Other"),
+            normalize_category(data.get("category", "Other")),
             data.get("description", ""),
             data.get("tag", ""),
             data.get("currency", "USD"),
