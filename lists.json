@@ -1,0 +1,1180 @@
+{
+    "us-sectors": {
+        "name": "US Equity Sectors",
+        "shortName": "US Sectors (GICS)",
+        "category": "ETFs",
+        "description": "Rank all 11 S&P 500 ETFs by momentum. Hold the top N equally weighted. Rebalance monthly. Returns calculated from today's price vs. the closing price exactly N months ago.",
+        "tag": "SPDR ETFs \u00b7 LIVE DATA",
+        "currency": "USD",
+        "items": [
+            {
+                "ticker": "XLY",
+                "tag": "Cyclical",
+                "name": "Consumer Discretionary",
+                "currency": "USD"
+            },
+            {
+                "ticker": "XLP",
+                "tag": "Defensive",
+                "name": "Consumer Staples",
+                "currency": "USD"
+            },
+            {
+                "ticker": "XLE",
+                "tag": "Cyclical",
+                "name": "Energy",
+                "currency": "USD"
+            },
+            {
+                "ticker": "XLF",
+                "tag": "Cyclical",
+                "name": "Financials",
+                "currency": "USD"
+            },
+            {
+                "ticker": "XLV",
+                "tag": "Defensive",
+                "name": "Health Care",
+                "currency": "USD"
+            },
+            {
+                "ticker": "XLI",
+                "tag": "Cyclical",
+                "name": "Industrials",
+                "currency": "USD"
+            },
+            {
+                "ticker": "XLB",
+                "tag": "Cyclical",
+                "name": "Materials",
+                "currency": "USD"
+            },
+            {
+                "ticker": "XLK",
+                "tag": "Cyclical",
+                "name": "Technology",
+                "currency": "USD"
+            },
+            {
+                "ticker": "XLU",
+                "tag": "Defensive",
+                "name": "Utilities",
+                "currency": "USD"
+            },
+            {
+                "ticker": "XLRE",
+                "tag": "Defensive",
+                "name": "Real Estate",
+                "currency": "USD"
+            },
+            {
+                "ticker": "XLC",
+                "tag": "Cyclical",
+                "name": "Communication Services",
+                "currency": "USD"
+            }
+        ]
+    },
+    "eu-sectors": {
+        "name": "EU Equity Sectors",
+        "shortName": "EU Supersectors (ICB)",
+        "category": "ETFs",
+        "description": "Rank European STOXX 600 ETFs (iShares, Xetra-listed) by momentum. Hold the top N equally weighted. Rebalance monthly.",
+        "tag": "iShares STOXX 600 \u00b7 LIVE DATA",
+        "currency": "EUR",
+        "items": [
+            {
+                "ticker": "EXV3.DE",
+                "tag": "Cyclical",
+                "name": "Technology",
+                "currency": "EUR"
+            },
+            {
+                "ticker": "EXV2.DE",
+                "tag": "Defensive",
+                "name": "Telecommunications",
+                "currency": "EUR"
+            },
+            {
+                "ticker": "EXV5.DE",
+                "tag": "Cyclical",
+                "name": "Automobiles & Parts",
+                "currency": "EUR"
+            },
+            {
+                "ticker": "EXV1.DE",
+                "tag": "Cyclical",
+                "name": "Banks",
+                "currency": "EUR"
+            },
+            {
+                "ticker": "EXH2.DE",
+                "tag": "Cyclical",
+                "name": "Financial Services",
+                "currency": "EUR"
+            },
+            {
+                "ticker": "EXV4.DE",
+                "tag": "Defensive",
+                "name": "Health Care",
+                "currency": "EUR"
+            },
+            {
+                "ticker": "EXI5.DE",
+                "tag": "Defensive",
+                "name": "Real Estate",
+                "currency": "EUR"
+            },
+            {
+                "ticker": "EXV6.DE",
+                "tag": "Cyclical",
+                "name": "Basic Resources",
+                "currency": "EUR"
+            },
+            {
+                "ticker": "EXH3.DE",
+                "tag": "Defensive",
+                "name": "Food & Beverage",
+                "currency": "EUR"
+            },
+            {
+                "ticker": "EXV9.DE",
+                "tag": "Cyclical",
+                "name": "Travel & Leisure",
+                "currency": "EUR"
+            },
+            {
+                "ticker": "EXV8.DE",
+                "tag": "Cyclical",
+                "name": "Construction & Materials",
+                "currency": "EUR"
+            },
+            {
+                "ticker": "EXV7.DE",
+                "tag": "Cyclical",
+                "name": "Chemicals",
+                "currency": "EUR"
+            },
+            {
+                "ticker": "EXH4.DE",
+                "tag": "Cyclical",
+                "name": "Industrial Goods & Svcs",
+                "currency": "EUR"
+            },
+            {
+                "ticker": "EXH7.DE",
+                "tag": "Defensive",
+                "name": "Personal & Household Goods",
+                "currency": "EUR"
+            },
+            {
+                "ticker": "EXH6.DE",
+                "tag": "Cyclical",
+                "name": "Media",
+                "currency": "EUR"
+            },
+            {
+                "ticker": "EXH5.DE",
+                "tag": "Defensive",
+                "name": "Insurance",
+                "currency": "EUR"
+            },
+            {
+                "ticker": "EXH9.DE",
+                "tag": "Defensive",
+                "name": "Utilities",
+                "currency": "EUR"
+            },
+            {
+                "ticker": "EXH8.DE",
+                "tag": "Cyclical",
+                "name": "Retail",
+                "currency": "EUR"
+            },
+            {
+                "ticker": "EXH1.DE",
+                "tag": "Cyclical",
+                "name": "Oil & Gas",
+                "currency": "EUR"
+            }
+        ]
+    },
+    "country-etfs": {
+        "name": "iShares Country ETFs",
+        "shortName": "Country ETFs",
+        "category": "ETFs",
+        "description": "Rank iShares MSCI Country ETFs by momentum. Hold the top N equally weighted. Rebalance monthly.",
+        "tag": "iShares MSCI \u00b7 LIVE DATA",
+        "currency": "USD",
+        "items": [
+            {
+                "ticker": "EWA",
+                "tag": "Oceania",
+                "name": "Australia",
+                "currency": "USD"
+            },
+            {
+                "ticker": "EWO",
+                "tag": "Europe",
+                "name": "Austria",
+                "currency": "USD"
+            },
+            {
+                "ticker": "EWK",
+                "tag": "Europe",
+                "name": "Belgium",
+                "currency": "USD"
+            },
+            {
+                "ticker": "EWZ",
+                "tag": "Latin America",
+                "name": "Brazil",
+                "currency": "USD"
+            },
+            {
+                "ticker": "EWC",
+                "tag": "North America",
+                "name": "Canada",
+                "currency": "USD"
+            },
+            {
+                "ticker": "MCHI",
+                "tag": "Asia",
+                "name": "China",
+                "currency": "USD"
+            },
+            {
+                "ticker": "EWQ",
+                "tag": "Europe",
+                "name": "France",
+                "currency": "USD"
+            },
+            {
+                "ticker": "EWG",
+                "tag": "Europe",
+                "name": "Germany",
+                "currency": "USD"
+            },
+            {
+                "ticker": "EWH",
+                "tag": "Asia",
+                "name": "Hong Kong",
+                "currency": "USD"
+            },
+            {
+                "ticker": "INDA",
+                "tag": "Asia",
+                "name": "India",
+                "currency": "USD"
+            },
+            {
+                "ticker": "EIDO",
+                "tag": "Asia",
+                "name": "Indonesia",
+                "currency": "USD"
+            },
+            {
+                "ticker": "EIS",
+                "tag": "Middle East",
+                "name": "Israel",
+                "currency": "USD"
+            },
+            {
+                "ticker": "EWI",
+                "tag": "Europe",
+                "name": "Italy",
+                "currency": "USD"
+            },
+            {
+                "ticker": "EWJ",
+                "tag": "Asia",
+                "name": "Japan",
+                "currency": "USD"
+            },
+            {
+                "ticker": "EWM",
+                "tag": "Asia",
+                "name": "Malaysia",
+                "currency": "USD"
+            },
+            {
+                "ticker": "EWW",
+                "tag": "Latin America",
+                "name": "Mexico",
+                "currency": "USD"
+            },
+            {
+                "ticker": "EWN",
+                "tag": "Europe",
+                "name": "Netherlands",
+                "currency": "USD"
+            },
+            {
+                "ticker": "ENZL",
+                "tag": "Oceania",
+                "name": "New Zealand",
+                "currency": "USD"
+            },
+            {
+                "ticker": "ENOR",
+                "tag": "Europe",
+                "name": "Norway",
+                "currency": "USD"
+            },
+            {
+                "ticker": "EPU",
+                "tag": "Latin America",
+                "name": "Peru",
+                "currency": "USD"
+            },
+            {
+                "ticker": "EPHE",
+                "tag": "Asia",
+                "name": "Philippines",
+                "currency": "USD"
+            },
+            {
+                "ticker": "EPOL",
+                "tag": "Europe",
+                "name": "Poland",
+                "currency": "USD"
+            },
+            {
+                "ticker": "QAT",
+                "tag": "Middle East",
+                "name": "Qatar",
+                "currency": "USD"
+            },
+            {
+                "ticker": "KSA",
+                "tag": "Middle East",
+                "name": "Saudi Arabia",
+                "currency": "USD"
+            },
+            {
+                "ticker": "EWS",
+                "tag": "Asia",
+                "name": "Singapore",
+                "currency": "USD"
+            },
+            {
+                "ticker": "EZA",
+                "tag": "Africa",
+                "name": "South Africa",
+                "currency": "USD"
+            },
+            {
+                "ticker": "EWY",
+                "tag": "Asia",
+                "name": "South Korea",
+                "currency": "USD"
+            },
+            {
+                "ticker": "EWP",
+                "tag": "Europe",
+                "name": "Spain",
+                "currency": "USD"
+            },
+            {
+                "ticker": "EWD",
+                "tag": "Europe",
+                "name": "Sweden",
+                "currency": "USD"
+            },
+            {
+                "ticker": "EWL",
+                "tag": "Europe",
+                "name": "Switzerland",
+                "currency": "USD"
+            },
+            {
+                "ticker": "EWT",
+                "tag": "Asia",
+                "name": "Taiwan",
+                "currency": "USD"
+            },
+            {
+                "ticker": "THD",
+                "tag": "Asia",
+                "name": "Thailand",
+                "currency": "USD"
+            },
+            {
+                "ticker": "TUR",
+                "tag": "Europe",
+                "name": "Turkey",
+                "currency": "USD"
+            },
+            {
+                "ticker": "UAE",
+                "tag": "Middle East",
+                "name": "UAE",
+                "currency": "USD"
+            },
+            {
+                "ticker": "EWU",
+                "tag": "Europe",
+                "name": "United Kingdom",
+                "currency": "USD"
+            },
+            {
+                "ticker": "EUSA",
+                "tag": "North America",
+                "name": "United States",
+                "currency": "USD"
+            }
+        ]
+    },
+    "commodities": {
+        "name": "Commodities ETFs & Funds",
+        "shortName": "Commodities",
+        "category": "ETFs",
+        "description": "Rank various commodity ETFs and ETCs by momentum. Hold the top N equally weighted. Rebalance monthly.",
+        "tag": "Broad Commodities \u00b7 LIVE DATA",
+        "currency": "USD",
+        "items": [
+            {
+                "ticker": "GC=F",
+                "name": "Gold",
+                "tag": "Metals",
+                "currency": "USD"
+            },
+            {
+                "ticker": "SI=F",
+                "name": "Silver",
+                "tag": "Metals",
+                "currency": "USD"
+            },
+            {
+                "ticker": "PL=F",
+                "name": "Platinum",
+                "tag": "Metals",
+                "currency": "USD"
+            },
+            {
+                "ticker": "HG=F",
+                "name": "Copper",
+                "tag": "Metals",
+                "currency": "USD"
+            },
+            {
+                "ticker": "PA=F",
+                "name": "Palladium",
+                "tag": "Metals",
+                "currency": "USD"
+            },
+            {
+                "ticker": "CL=F",
+                "name": "Crude Oil",
+                "tag": "Energy",
+                "currency": "USD"
+            },
+            {
+                "ticker": "HO=F",
+                "name": "Heating Oil",
+                "tag": "Energy",
+                "currency": "USD"
+            },
+            {
+                "ticker": "NG=F",
+                "name": "Natural Gas",
+                "tag": "Energy",
+                "currency": "USD"
+            },
+            {
+                "ticker": "RB=F",
+                "name": "RBOB Gasoline",
+                "tag": "Energy",
+                "currency": "USD"
+            },
+            {
+                "ticker": "BZ=F",
+                "name": "Brent Crude Oil",
+                "tag": "Energy",
+                "currency": "USD"
+            },
+            {
+                "ticker": "ZC=F",
+                "name": "Corn",
+                "tag": "Agriculture",
+                "currency": "USX"
+            },
+            {
+                "ticker": "KE=F",
+                "name": "Wheat",
+                "tag": "Agriculture",
+                "currency": "USX"
+            },
+            {
+                "ticker": "ZM=F",
+                "name": "Soybean Meal",
+                "tag": "Agriculture",
+                "currency": "USD"
+            },
+            {
+                "ticker": "ZL=F",
+                "name": "Soybean Oil",
+                "tag": "Agriculture",
+                "currency": "USX"
+            },
+            {
+                "ticker": "ZS=F",
+                "name": "Soybean",
+                "tag": "Agriculture",
+                "currency": "USX"
+            },
+            {
+                "ticker": "GF=F",
+                "name": "Feeder Cattle",
+                "tag": "Livestock",
+                "currency": "USX"
+            },
+            {
+                "ticker": "HE=F",
+                "name": "Lean Hog",
+                "tag": "Livestock",
+                "currency": "USX"
+            },
+            {
+                "ticker": "LE=F",
+                "name": "Live Cattle",
+                "tag": "Livestock",
+                "currency": "USX"
+            },
+            {
+                "ticker": "CC=F",
+                "name": "Cocoa",
+                "tag": "Agriculture",
+                "currency": "USD"
+            },
+            {
+                "ticker": "KC=F",
+                "name": "Coffee",
+                "tag": "Agriculture",
+                "currency": "USX"
+            },
+            {
+                "ticker": "CT=F",
+                "name": "Cotton",
+                "tag": "Agriculture",
+                "currency": "USX"
+            },
+            {
+                "ticker": "SB=F",
+                "name": "Sugar",
+                "tag": "Agriculture",
+                "currency": "USX"
+            },
+            {
+                "ticker": "SRUUF",
+                "name": "Uranium",
+                "tag": "Energy",
+                "currency": "USD"
+            }
+        ]
+    },
+    "global-100": {
+        "name": "Top 100 Global Equities",
+        "shortName": "Global 100",
+        "category": "Stocks",
+        "description": "Rank the top 100 global stocks by market cap. Hold the top N equally weighted. Rebalance monthly.",
+        "tag": "Global Equities \u00b7 LIVE DATA",
+        "currency": "USD",
+        "items": [
+            {
+                "ticker": "NVDA",
+                "name": "NVDA",
+                "tag": "Global",
+                "currency": "USD"
+            },
+            {
+                "ticker": "AAPL",
+                "name": "AAPL",
+                "tag": "Global",
+                "currency": "USD"
+            },
+            {
+                "ticker": "GOOG",
+                "name": "GOOG",
+                "tag": "Global",
+                "currency": "USD"
+            },
+            {
+                "ticker": "MSFT",
+                "name": "MSFT",
+                "tag": "Global",
+                "currency": "USD"
+            },
+            {
+                "ticker": "AMZN",
+                "name": "AMZN",
+                "tag": "Global",
+                "currency": "USD"
+            },
+            {
+                "ticker": "2330.TW",
+                "name": "Taiwan Semi",
+                "tag": "Global",
+                "currency": "TWD"
+            },
+            {
+                "ticker": "META",
+                "name": "META",
+                "tag": "Global",
+                "currency": "USD"
+            },
+            {
+                "ticker": "2222.SR",
+                "name": "Saudi Aramco",
+                "tag": "Global",
+                "currency": "SAR"
+            },
+            {
+                "ticker": "TSLA",
+                "name": "TSLA",
+                "tag": "Global",
+                "currency": "USD"
+            },
+            {
+                "ticker": "AVGO",
+                "name": "AVGO",
+                "tag": "Global",
+                "currency": "USD"
+            },
+            {
+                "ticker": "BRK-A",
+                "name": "Berkshire",
+                "tag": "Global",
+                "currency": "USD"
+            },
+            {
+                "ticker": "WMT",
+                "name": "WMT",
+                "tag": "Global",
+                "currency": "USD"
+            },
+            {
+                "ticker": "LLY",
+                "name": "LLY",
+                "tag": "Global",
+                "currency": "USD"
+            },
+            {
+                "ticker": "005930.KS",
+                "name": "Samsung",
+                "tag": "Global",
+                "currency": "KRW"
+            },
+            {
+                "ticker": "JPM",
+                "name": "JPM",
+                "tag": "Global",
+                "currency": "USD"
+            },
+            {
+                "ticker": "XOM",
+                "name": "XOM",
+                "tag": "Global",
+                "currency": "USD"
+            },
+            {
+                "ticker": "V",
+                "name": "V",
+                "tag": "Global",
+                "currency": "USD"
+            },
+            {
+                "ticker": "0700.HK",
+                "name": "Tencent",
+                "tag": "Global",
+                "currency": "HKD"
+            },
+            {
+                "ticker": "JNJ",
+                "name": "JNJ",
+                "tag": "Global",
+                "currency": "USD"
+            },
+            {
+                "ticker": "ASML",
+                "name": "ASML",
+                "tag": "Global",
+                "currency": "USD"
+            },
+            {
+                "ticker": "000660.KS",
+                "name": "SK hynix",
+                "tag": "Global",
+                "currency": "KRW"
+            },
+            {
+                "ticker": "MU",
+                "name": "MU",
+                "tag": "Global",
+                "currency": "USD"
+            },
+            {
+                "ticker": "MA",
+                "name": "MA",
+                "tag": "Global",
+                "currency": "USD"
+            },
+            {
+                "ticker": "COST",
+                "name": "COST",
+                "tag": "Global",
+                "currency": "USD"
+            },
+            {
+                "ticker": "ORCL",
+                "name": "ORCL",
+                "tag": "Global",
+                "currency": "USD"
+            },
+            {
+                "ticker": "ABBV",
+                "name": "ABBV",
+                "tag": "Global",
+                "currency": "USD"
+            },
+            {
+                "ticker": "ROG.SW",
+                "name": "Roche",
+                "tag": "Global",
+                "currency": "CHF"
+            },
+            {
+                "ticker": "PG",
+                "name": "PG",
+                "tag": "Global",
+                "currency": "USD"
+            },
+            {
+                "ticker": "BAC",
+                "name": "BAC",
+                "tag": "Global",
+                "currency": "USD"
+            },
+            {
+                "ticker": "HD",
+                "name": "HD",
+                "tag": "Global",
+                "currency": "USD"
+            },
+            {
+                "ticker": "CVX",
+                "name": "CVX",
+                "tag": "Global",
+                "currency": "USD"
+            },
+            {
+                "ticker": "GE",
+                "name": "GE",
+                "tag": "Global",
+                "currency": "USD"
+            },
+            {
+                "ticker": "NFLX",
+                "name": "NFLX",
+                "tag": "Global",
+                "currency": "USD"
+            },
+            {
+                "ticker": "CAT",
+                "name": "CAT",
+                "tag": "Global",
+                "currency": "USD"
+            },
+            {
+                "ticker": "601398.SS",
+                "name": "ICBC",
+                "tag": "Global",
+                "currency": "CNY"
+            },
+            {
+                "ticker": "KO",
+                "name": "KO",
+                "tag": "Global",
+                "currency": "USD"
+            },
+            {
+                "ticker": "AMD",
+                "name": "AMD",
+                "tag": "Global",
+                "currency": "USD"
+            },
+            {
+                "ticker": "PLTR",
+                "name": "PLTR",
+                "tag": "Global",
+                "currency": "USD"
+            },
+            {
+                "ticker": "MC.PA",
+                "name": "LVMH",
+                "tag": "Global",
+                "currency": "EUR"
+            },
+            {
+                "ticker": "HSBA.L",
+                "name": "HSBC",
+                "tag": "Global",
+                "currency": "GBp"
+            },
+            {
+                "ticker": "601288.SS",
+                "name": "Agri Bank China",
+                "tag": "Global",
+                "currency": "CNY"
+            },
+            {
+                "ticker": "AZN.L",
+                "name": "AstraZeneca",
+                "tag": "Global",
+                "currency": "GBp"
+            },
+            {
+                "ticker": "NOVN.SW",
+                "name": "Novartis",
+                "tag": "Global",
+                "currency": "CHF"
+            },
+            {
+                "ticker": "BABA",
+                "name": "BABA",
+                "tag": "Global",
+                "currency": "USD"
+            },
+            {
+                "ticker": "7203.T",
+                "name": "Toyota",
+                "tag": "Global",
+                "currency": "JPY"
+            },
+            {
+                "ticker": "CSCO",
+                "name": "CSCO",
+                "tag": "Global",
+                "currency": "USD"
+            },
+            {
+                "ticker": "LRCX",
+                "name": "LRCX",
+                "tag": "Global",
+                "currency": "USD"
+            },
+            {
+                "ticker": "AMAT",
+                "name": "AMAT",
+                "tag": "Global",
+                "currency": "USD"
+            },
+            {
+                "ticker": "MRK",
+                "name": "MRK",
+                "tag": "Global",
+                "currency": "USD"
+            },
+            {
+                "ticker": "PM",
+                "name": "PM",
+                "tag": "Global",
+                "currency": "USD"
+            },
+            {
+                "ticker": "601857.SS",
+                "name": "PetroChina",
+                "tag": "Global",
+                "currency": "CNY"
+            },
+            {
+                "ticker": "MS",
+                "name": "MS",
+                "tag": "Global",
+                "currency": "USD"
+            },
+            {
+                "ticker": "GS",
+                "name": "GS",
+                "tag": "Global",
+                "currency": "USD"
+            },
+            {
+                "ticker": "0939.HK",
+                "name": "China Construction Bank",
+                "tag": "Global",
+                "currency": "HKD"
+            },
+            {
+                "ticker": "600519.SS",
+                "name": "Kweichow Moutai",
+                "tag": "Global",
+                "currency": "CNY"
+            },
+            {
+                "ticker": "NESN.SW",
+                "name": "Nestle",
+                "tag": "Global",
+                "currency": "CHF"
+            },
+            {
+                "ticker": "WFC",
+                "name": "WFC",
+                "tag": "Global",
+                "currency": "USD"
+            },
+            {
+                "ticker": "RTX",
+                "name": "RTX",
+                "tag": "Global",
+                "currency": "USD"
+            },
+            {
+                "ticker": "UNH",
+                "name": "UNH",
+                "tag": "Global",
+                "currency": "USD"
+            },
+            {
+                "ticker": "RMS.PA",
+                "name": "Hermes",
+                "tag": "Global",
+                "currency": "EUR"
+            },
+            {
+                "ticker": "OR.PA",
+                "name": "L'Oreal",
+                "tag": "Global",
+                "currency": "EUR"
+            },
+            {
+                "ticker": "300750.SZ",
+                "name": "CATL",
+                "tag": "Global",
+                "currency": "CNY"
+            },
+            {
+                "ticker": "RY.TO",
+                "name": "Royal Bank of Canada",
+                "tag": "Global",
+                "currency": "CAD"
+            },
+            {
+                "ticker": "MCD",
+                "name": "MCD",
+                "tag": "Global",
+                "currency": "USD"
+            },
+            {
+                "ticker": "GEV",
+                "name": "GEV",
+                "tag": "Global",
+                "currency": "USD"
+            },
+            {
+                "ticker": "TMUS",
+                "name": "TMUS",
+                "tag": "Global",
+                "currency": "USD"
+            },
+            {
+                "ticker": "LIN",
+                "name": "LIN",
+                "tag": "Global",
+                "currency": "USD"
+            },
+            {
+                "ticker": "SHEL.L",
+                "name": "Shell",
+                "tag": "Global",
+                "currency": "GBp"
+            },
+            {
+                "ticker": "AXP",
+                "name": "AXP",
+                "tag": "Global",
+                "currency": "USD"
+            },
+            {
+                "ticker": "PEP",
+                "name": "PEP",
+                "tag": "Global",
+                "currency": "USD"
+            },
+            {
+                "ticker": "601988.SS",
+                "name": "Bank of China",
+                "tag": "Global",
+                "currency": "CNY"
+            },
+            {
+                "ticker": "INTC",
+                "name": "INTC",
+                "tag": "Global",
+                "currency": "USD"
+            },
+            {
+                "ticker": "IBM",
+                "name": "IBM",
+                "tag": "Global",
+                "currency": "USD"
+            },
+            {
+                "ticker": "SIE.DE",
+                "name": "Siemens",
+                "tag": "Global",
+                "currency": "EUR"
+            },
+            {
+                "ticker": "SAP.DE",
+                "name": "SAP",
+                "tag": "Global",
+                "currency": "EUR"
+            },
+            {
+                "ticker": "600941.SS",
+                "name": "China Mobile",
+                "tag": "Global",
+                "currency": "CNY"
+            },
+            {
+                "ticker": "CBA.AX",
+                "name": "Commonwealth Bank",
+                "tag": "Global",
+                "currency": "AUD"
+            },
+            {
+                "ticker": "ITX.MC",
+                "name": "Inditex",
+                "tag": "Global",
+                "currency": "EUR"
+            },
+            {
+                "ticker": "RELIANCE.NS",
+                "name": "Reliance",
+                "tag": "Global",
+                "currency": "INR"
+            },
+            {
+                "ticker": "VZ",
+                "name": "VZ",
+                "tag": "Global",
+                "currency": "USD"
+            },
+            {
+                "ticker": "AMGN",
+                "name": "AMGN",
+                "tag": "Global",
+                "currency": "USD"
+            },
+            {
+                "ticker": "BHP.AX",
+                "name": "BHP",
+                "tag": "Global",
+                "currency": "AUD"
+            },
+            {
+                "ticker": "C",
+                "name": "C",
+                "tag": "Global",
+                "currency": "USD"
+            },
+            {
+                "ticker": "8306.T",
+                "name": "Mitsubishi UFJ",
+                "tag": "Global",
+                "currency": "JPY"
+            },
+            {
+                "ticker": "ABT",
+                "name": "ABT",
+                "tag": "Global",
+                "currency": "USD"
+            },
+            {
+                "ticker": "KLAC",
+                "name": "KLAC",
+                "tag": "Global",
+                "currency": "USD"
+            },
+            {
+                "ticker": "TMO",
+                "name": "TMO",
+                "tag": "Global",
+                "currency": "USD"
+            },
+            {
+                "ticker": "DTE.DE",
+                "name": "Deutsche Telekom",
+                "tag": "Global",
+                "currency": "EUR"
+            },
+            {
+                "ticker": "SAN.MC",
+                "name": "Banco Santander",
+                "tag": "Global",
+                "currency": "EUR"
+            },
+            {
+                "ticker": "TXN",
+                "name": "TXN",
+                "tag": "Global",
+                "currency": "USD"
+            },
+            {
+                "ticker": "T",
+                "name": "T",
+                "tag": "Global",
+                "currency": "USD"
+            },
+            {
+                "ticker": "NEE",
+                "name": "NEE",
+                "tag": "Global",
+                "currency": "USD"
+            },
+            {
+                "ticker": "DIS",
+                "name": "DIS",
+                "tag": "Global",
+                "currency": "USD"
+            },
+            {
+                "ticker": "CRM",
+                "name": "CRM",
+                "tag": "Global",
+                "currency": "USD"
+            },
+            {
+                "ticker": "APH",
+                "name": "APH",
+                "tag": "Global",
+                "currency": "USD"
+            },
+            {
+                "ticker": "BA",
+                "name": "BA",
+                "tag": "Global",
+                "currency": "USD"
+            },
+            {
+                "ticker": "ISRG",
+                "name": "ISRG",
+                "tag": "Global",
+                "currency": "USD"
+            },
+            {
+                "ticker": "GILD",
+                "name": "GILD",
+                "tag": "Global",
+                "currency": "USD"
+            },
+            {
+                "ticker": "SCCO",
+                "name": "SCCO",
+                "tag": "Global",
+                "currency": "USD"
+            }
+        ]
+    }
+}
