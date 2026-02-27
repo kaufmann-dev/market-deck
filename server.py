@@ -1,0 +1,245 @@
+"""
+server.py – FastAPI backend serving static files + REST API for watchlist CRUD
+Run:  python server.py
+"""
+import sqlite3, os, json
+from contextlib import contextmanager
+from fastapi import FastAPI, HTTPException
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+from pydantic import BaseModel
+from typing import Optional
+
+APP_DIR = os.path.dirname(os.path.abspath(__file__))
+DB_PATH = os.path.join(APP_DIR, "data.db")
+
+app = FastAPI()
+
+# ── DB helper ──
+@contextmanager
+def get_db():
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON")
+    try:
+        yield conn
+    finally:
+        conn.close()
+
+# ══════════════════════════════════════
+#  PYDANTIC MODELS
+# ══════════════════════════════════════
+class TickerCreate(BaseModel):
+    symbol: str
+    name: str
+    tag: str = ""
+    currency: str = "USD"
+
+class TickerUpdate(BaseModel):
+    symbol: Optional[str] = None
+    name: Optional[str] = None
+    tag: Optional[str] = None
+    currency: Optional[str] = None
+
+class WatchlistCreate(BaseModel):
+    slug: str
+    name: str
+    short_name: str
+    category: str = "Other"
+    description: str = ""
+    tag: str = ""
+    currency: str = "USD"
+
+class WatchlistUpdate(BaseModel):
+    name: Optional[str] = None
+    short_name: Optional[str] = None
+    category: Optional[str] = None
+    description: Optional[str] = None
+    tag: Optional[str] = None
+    currency: Optional[str] = None
+
+class SettingUpdate(BaseModel):
+    value: str
+
+class TagColorUpdate(BaseModel):
+    bg: str
+    text: str
+    border: str
+
+# ══════════════════════════════════════
+#  API: INIT (single call to bootstrap frontend)
+# ══════════════════════════════════════
+@app.get("/api/init")
+def api_init():
+    with get_db() as conn:
+        # settings
+        settings = {}
+        for row in conn.execute("SELECT key, value FROM settings"):
+            settings[row["key"]] = row["value"]
+
+        # tag colors
+        tag_colors = {}
+        for row in conn.execute("SELECT * FROM tag_colors"):
+            tag_colors[row["tag"]] = {"bg": row["bg"], "text": row["text"], "border": row["border"]}
+
+        # watchlists + tickers  (build the same shape as the old lists.json)
+        lists = {}
+        for wl in conn.execute("SELECT * FROM watchlists ORDER BY id"):
+            slug = wl["slug"]
+            tickers = []
+            for t in conn.execute("SELECT * FROM tickers WHERE watchlist_id=? ORDER BY sort_order", (wl["id"],)):
+                tickers.append({
+                    "id": t["id"],
+                    "ticker": t["symbol"],
+                    "name": t["name"],
+                    "tag": t["tag"],
+                    "currency": t["currency"],
+                })
+            lists[slug] = {
+                "id": wl["id"],
+                "name": wl["name"],
+                "shortName": wl["short_name"],
+                "category": wl["category"],
+                "description": wl["description"],
+                "tag": wl["tag"],
+                "currency": wl["currency"],
+                "items": tickers,
+            }
+
+    return {"settings": settings, "tagColors": tag_colors, "lists": lists}
+
+# ══════════════════════════════════════
+#  API: SETTINGS
+# ══════════════════════════════════════
+@app.get("/api/settings")
+def get_settings():
+    with get_db() as conn:
+        return {row["key"]: row["value"] for row in conn.execute("SELECT * FROM settings")}
+
+@app.put("/api/settings/{key}")
+def update_setting(key: str, body: SettingUpdate):
+    with get_db() as conn:
+        conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", (key, body.value))
+        conn.commit()
+    return {"key": key, "value": body.value}
+
+# ══════════════════════════════════════
+#  API: WATCHLISTS
+# ══════════════════════════════════════
+@app.post("/api/lists")
+def create_list(body: WatchlistCreate):
+    with get_db() as conn:
+        try:
+            cur = conn.execute("""
+                INSERT INTO watchlists (slug, name, short_name, category, description, tag, currency)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (body.slug, body.name, body.short_name, body.category, body.description, body.tag, body.currency))
+            conn.commit()
+            return {"id": cur.lastrowid, "slug": body.slug}
+        except sqlite3.IntegrityError:
+            raise HTTPException(400, f"Slug '{body.slug}' already exists")
+
+@app.put("/api/lists/{slug}")
+def update_list(slug: str, body: WatchlistUpdate):
+    with get_db() as conn:
+        row = conn.execute("SELECT id FROM watchlists WHERE slug=?", (slug,)).fetchone()
+        if not row:
+            raise HTTPException(404, "List not found")
+        updates = {k: v for k, v in body.model_dump().items() if v is not None}
+        if not updates:
+            raise HTTPException(400, "No fields to update")
+        # map short_name -> short_name column
+        col_map = {"short_name": "short_name"}
+        set_clause = ", ".join(f"{col_map.get(k,k)}=?" for k in updates)
+        vals = list(updates.values()) + [slug]
+        conn.execute(f"UPDATE watchlists SET {set_clause} WHERE slug=?", vals)
+        conn.commit()
+    return {"ok": True}
+
+@app.delete("/api/lists/{slug}")
+def delete_list(slug: str):
+    with get_db() as conn:
+        row = conn.execute("SELECT id FROM watchlists WHERE slug=?", (slug,)).fetchone()
+        if not row:
+            raise HTTPException(404, "List not found")
+        conn.execute("DELETE FROM tickers WHERE watchlist_id=?", (row["id"],))
+        conn.execute("DELETE FROM watchlists WHERE id=?", (row["id"],))
+        conn.commit()
+    return {"ok": True}
+
+# ══════════════════════════════════════
+#  API: TICKERS
+# ══════════════════════════════════════
+@app.post("/api/lists/{slug}/tickers")
+def add_ticker(slug: str, body: TickerCreate):
+    with get_db() as conn:
+        wl = conn.execute("SELECT id FROM watchlists WHERE slug=?", (slug,)).fetchone()
+        if not wl:
+            raise HTTPException(404, "List not found")
+        max_order = conn.execute("SELECT COALESCE(MAX(sort_order),-1) FROM tickers WHERE watchlist_id=?", (wl["id"],)).fetchone()[0]
+        cur = conn.execute("""
+            INSERT INTO tickers (watchlist_id, symbol, name, tag, currency, sort_order)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (wl["id"], body.symbol, body.name, body.tag, body.currency, max_order + 1))
+        conn.commit()
+        return {"id": cur.lastrowid}
+
+@app.put("/api/tickers/{ticker_id}")
+def update_ticker(ticker_id: int, body: TickerUpdate):
+    with get_db() as conn:
+        row = conn.execute("SELECT id FROM tickers WHERE id=?", (ticker_id,)).fetchone()
+        if not row:
+            raise HTTPException(404, "Ticker not found")
+        updates = {k: v for k, v in body.model_dump().items() if v is not None}
+        if not updates:
+            raise HTTPException(400, "No fields to update")
+        col_map = {"symbol": "symbol"}
+        set_clause = ", ".join(f"{col_map.get(k,k)}=?" for k in updates)
+        vals = list(updates.values()) + [ticker_id]
+        conn.execute(f"UPDATE tickers SET {set_clause} WHERE id=?", vals)
+        conn.commit()
+    return {"ok": True}
+
+@app.delete("/api/tickers/{ticker_id}")
+def delete_ticker(ticker_id: int):
+    with get_db() as conn:
+        row = conn.execute("SELECT id FROM tickers WHERE id=?", (ticker_id,)).fetchone()
+        if not row:
+            raise HTTPException(404, "Ticker not found")
+        conn.execute("DELETE FROM tickers WHERE id=?", (ticker_id,))
+        conn.commit()
+    return {"ok": True}
+
+# ══════════════════════════════════════
+#  API: TAG COLORS
+# ══════════════════════════════════════
+@app.put("/api/tag-colors/{tag}")
+def update_tag_color(tag: str, body: TagColorUpdate):
+    with get_db() as conn:
+        conn.execute("INSERT OR REPLACE INTO tag_colors (tag, bg, text, border) VALUES (?, ?, ?, ?)",
+                     (tag, body.bg, body.text, body.border))
+        conn.commit()
+    return {"ok": True}
+
+# ══════════════════════════════════════
+#  STATIC FILES (serve index.html + assets)
+#  Using a catch-all route so API routes above take priority
+# ══════════════════════════════════════
+@app.get("/{path:path}")
+def serve_static(path: str):
+    if not path or path == "/":
+        return FileResponse(os.path.join(APP_DIR, "index.html"))
+    # Check direct path first (e.g. index.html at root)
+    file_path = os.path.join(APP_DIR, path)
+    if os.path.isfile(file_path):
+        return FileResponse(file_path)
+    # fallback to index.html for SPA-like behavior
+    return FileResponse(os.path.join(APP_DIR, "index.html"))
+
+# ══════════════════════════════════════
+#  RUN
+# ══════════════════════════════════════
+if __name__ == "__main__":
+    import uvicorn
+    print(f"Starting server at http://localhost:8000")
+    uvicorn.run(app, host="0.0.0.0", port=8000)
