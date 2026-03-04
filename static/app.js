@@ -479,6 +479,26 @@ function buildControls() {
     b.onclick = () => { state.topN = n;[1, 2, 3, 4, 5].forEach(x => { document.getElementById("tn" + x).className = x === n ? "a-blue" : ""; }); render(); };
     tn.appendChild(b);
   });
+
+  const typeCg = document.getElementById("type-filter-cg");
+  const typeSelect = document.getElementById("type-filter-select");
+  const list = LISTS[state.activeList];
+  if (list && list.showType !== false) {
+    typeCg.style.display = "";
+
+    // Get unique tags
+    const tags = new Set(list.items.map(item => item.tag).filter(t => t));
+    const sortedTags = Array.from(tags).sort();
+
+    let optionsHtml = `<option value="All">All Types</option>\n`;
+    sortedTags.forEach(tag => {
+      optionsHtml += `<option value="${tag}">${tag}</option>\n`;
+    });
+    typeSelect.innerHTML = optionsHtml;
+    typeSelect.value = state.typeFilter;
+  } else {
+    typeCg.style.display = "none";
+  }
 }
 
 function setView(v) {
@@ -572,7 +592,13 @@ function render() {
   if (!state.activeList) return;
   const list = LISTS[state.activeList];
   const sym = currencySymbol(GLOBAL_BASE_CURRENCY);
-  const scored = getScored();
+  let scored = getScored();
+
+  // Apply type filter
+  if (state.typeFilter !== "All") {
+    scored = scored.filter(s => s.tag === state.typeFilter);
+  }
+
   const ranked = scored.filter(s => s.score !== null).sort((a, b) => b.score - a.score).map((s, i) => ({ ...s, rank: i + 1 }));
   const missing = scored.filter(s => s.score === null).map((s, i) => ({ ...s, rank: ranked.length + i + 1 }));
   const all = [...ranked, ...missing];
@@ -670,7 +696,7 @@ function render() {
         </div>
       </td>
       ${cells}
-      <td style="padding:14px 20px;text-align:center;background:transparent;border-bottom:1px solid var(--border-subtle);font-family:'Google Sans Code', monospace;font-size:12px;color:${retTextColor(total12m)}">${total12m !== null ? fmtPct(total12m) : "—"}</td>
+      <td style="padding:14px 20px;text-align:center;border-bottom:1px solid var(--border-subtle);font-family:'Google Sans Code', monospace;font-size:12px;color:${retTextColor(total12m)}">${total12m !== null ? fmtPct(total12m) : "—"}</td>
     </tr>`;
   });
 
