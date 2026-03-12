@@ -13,6 +13,10 @@ def normalize_category(category):
     cleaned = " ".join(str(category or "").split())
     return (cleaned or "Other").upper()
 
+def normalize_tag(tag):
+    cleaned = " ".join(str(tag or "").split())
+    return cleaned.upper()
+
 def migrate():
     if os.path.exists(DB_PATH):
         os.remove(DB_PATH)
@@ -86,7 +90,7 @@ def migrate():
         colors = json.load(f)
     for tag, vals in colors.items():
         c.execute("INSERT INTO tag_colors (tag, bg, text, border) VALUES (?, ?, ?, ?)",
-                  (tag, vals["bg"], vals["text"], vals["border"]))
+                  (normalize_tag(tag), vals["bg"], vals["text"], vals["border"]))
     print(f"Migrated {len(colors)} tag colors")
 
     conn.commit()
