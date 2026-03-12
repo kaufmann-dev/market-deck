@@ -87,7 +87,7 @@ function resetDataCaches() {
 
 function normalizeCategoryValue(category) {
   const cleaned = String(category ?? "").trim().replace(/\s+/g, " ");
-  return cleaned || "Other";
+  return (cleaned || "Other").toUpperCase();
 }
 
 function categoryKey(category) {
