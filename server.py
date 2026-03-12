@@ -88,29 +88,20 @@ def _normalize_tag(tag: str) -> str:
 def api_init():
     with get_db() as conn:
         # settings
-        settings = {}
-        for row in conn.execute("SELECT key, value FROM settings"):
-            settings[row["key"]] = row["value"]
+        settings = {
+            row["key"]: row["value"]
+            for row in conn.execute("SELECT key, value FROM settings")
+        }
 
         # tag colors
-        tag_colors = {}
-        for row in conn.execute("SELECT * FROM tag_colors"):
-            tag_colors[row["tag"]] = {"bg": row["bg"], "text": row["text"], "border": row["border"]}
+        tag_colors = {
+            row["tag"]: {"bg": row["bg"], "text": row["text"], "border": row["border"]}
+            for row in conn.execute("SELECT * FROM tag_colors")
+        }
 
-        # watchlists + tickers  (build the same shape as the old lists.json)
-        lists = {}
-        for wl in conn.execute("SELECT * FROM watchlists ORDER BY id"):
-            slug = wl["slug"]
-            tickers = []
-            for t in conn.execute("SELECT * FROM tickers WHERE watchlist_id=? ORDER BY sort_order", (wl["id"],)):
-                tickers.append({
-                    "id": t["id"],
-                    "ticker": t["symbol"],
-                    "name": t["name"],
-                    "tag": t["tag"],
-                    "currency": t["currency"],
-                })
-            lists[slug] = {
+        watchlists = list(conn.execute("SELECT * FROM watchlists ORDER BY id"))
+        lists = {
+            wl["slug"]: {
                 "id": wl["id"],
                 "name": wl["name"],
                 "shortName": wl["short_name"],
@@ -119,8 +110,24 @@ def api_init():
                 "tag": wl["tag"],
                 "currency": wl["currency"],
                 "showType": bool(wl["show_type"]),
-                "items": tickers,
+                "items": [],
             }
+            for wl in watchlists
+        }
+        watchlist_slugs = {wl["id"]: wl["slug"] for wl in watchlists}
+
+        # watchlists + tickers (same shape as the old lists.json)
+        for t in conn.execute("SELECT * FROM tickers ORDER BY watchlist_id, sort_order"):
+            slug = watchlist_slugs.get(t["watchlist_id"])
+            if slug is None:
+                continue
+            lists[slug]["items"].append({
+                "id": t["id"],
+                "ticker": t["symbol"],
+                "name": t["name"],
+                "tag": t["tag"],
+                "currency": t["currency"],
+            })
 
     return {"settings": settings, "tagColors": tag_colors, "lists": lists}
 
