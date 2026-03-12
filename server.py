@@ -2,7 +2,7 @@
 server.py – FastAPI backend serving static files + REST API for watchlist CRUD
 Run:  python server.py
 """
-import sqlite3, os, math
+import sqlite3, os
 from contextlib import contextmanager
 from pathlib import Path
 from fastapi import FastAPI, HTTPException
@@ -266,8 +266,14 @@ CACHE_TTL = 300  # 5 minutes
 # In-memory per-ticker result cache
 _price_cache = {}  # { "AAPL": { "data": [...], "ts": 1234567890 } }
 
+def _is_cacheable_series(data):
+    return isinstance(data, list) and len(data) >= 2
+
 def _is_cached(ticker):
     entry = _price_cache.get(ticker)
+    if entry and not _is_cacheable_series(entry["data"]):
+        _price_cache.pop(ticker, None)
+        return False
     if entry and (_time.time() - entry["ts"]) < CACHE_TTL:
         return True
     return False
@@ -276,7 +282,7 @@ def _get_cached(ticker):
     return _price_cache[ticker]["data"]
 
 def _set_cached(ticker, data):
-    if data is None:
+    if not _is_cacheable_series(data):
         _price_cache.pop(ticker, None)
         return
     _price_cache[ticker] = {"data": data, "ts": _time.time()}
@@ -295,6 +301,49 @@ def _download_prices(tickers):
     )
     return _parse_df(df, tickers)
 
+def _extract_close_series(df, ticker):
+    if isinstance(df, pd.Series):
+        return df.dropna()
+
+    if isinstance(df, pd.DataFrame):
+        if isinstance(df.columns, pd.MultiIndex):
+            for candidate in (("Close", ticker), (ticker, "Close")):
+                if candidate in df.columns:
+                    return df[candidate].dropna()
+
+            for level in (0, -1):
+                try:
+                    closes = df.xs("Close", axis=1, level=level)
+                except (KeyError, ValueError):
+                    continue
+
+                if isinstance(closes, pd.Series):
+                    return closes.dropna()
+                if ticker in closes.columns:
+                    return closes[ticker].dropna()
+                if closes.shape[1] == 1:
+                    return closes.iloc[:, 0].dropna()
+
+        if "Close" in df.columns:
+            closes = df["Close"]
+            if isinstance(closes, pd.DataFrame):
+                if ticker in closes.columns:
+                    return closes[ticker].dropna()
+                if closes.shape[1] == 1:
+                    return closes.iloc[:, 0].dropna()
+            return closes.dropna()
+
+    if hasattr(df, "Close"):
+        closes = df.Close
+        if isinstance(closes, pd.DataFrame):
+            if ticker in closes.columns:
+                return closes[ticker].dropna()
+            if closes.shape[1] == 1:
+                return closes.iloc[:, 0].dropna()
+        return closes.dropna()
+
+    return None
+
 def _parse_df(df, tickers):
     """Parse a yfinance DataFrame into {ticker: [{date, close}, ...]}"""
     result = {}
@@ -303,22 +352,12 @@ def _parse_df(df, tickers):
 
     if len(tickers) == 1:
         ticker = tickers[0]
-        # For a single ticker, yfinance sometimes returns a Series if only one column is requested,
-        # or a DataFrame without the MultiIndex.
         try:
-            if isinstance(df, pd.DataFrame) and "Close" in df.columns:
-                closes = df["Close"].dropna()
-            elif hasattr(df, "Close"):
-                closes = df.Close.dropna()
-            elif isinstance(df, pd.Series):
-                closes = df.dropna()
-            else:
-                closes = []
-                
+            closes = _extract_close_series(df, ticker)
             points = []
-            if hasattr(closes, 'items'):
+            if closes is not None and hasattr(closes, 'items'):
                 for date, close in closes.items():
-                    if not math.isnan(close):
+                    if pd.notna(close):
                         points.append({"date": date.strftime("%Y-%m-%d"), "close": round(float(close), 4)})
             
             result[ticker] = points if points else None
@@ -328,16 +367,13 @@ def _parse_df(df, tickers):
     else:
         for ticker in tickers:
             try:
-                if ("Close", ticker) in df.columns:
-                    closes = df[("Close", ticker)].dropna()
-                elif hasattr(df, "Close") and ticker in df["Close"].columns:
-                    closes = df["Close"][ticker].dropna()
-                else:
+                closes = _extract_close_series(df, ticker)
+                if closes is None:
                     result[ticker] = None
                     continue
                 points = []
                 for date, close in closes.items():
-                    if not math.isnan(close):
+                    if pd.notna(close):
                         points.append({"date": date.strftime("%Y-%m-%d"), "close": round(float(close), 4)})
                 result[ticker] = points if points else None
             except Exception:
