@@ -14,11 +14,76 @@ let state = {
   view: "r",
   cache: {},       // { listId: { ticker: [points] } }
   fxCache: {},     // { "EURUSD=X": [points], etc }
+  pendingLoads: {}, // { listId: Promise<void> }
+  pendingControllers: {}, // { listId: AbortController }
+  dataEpoch: 0,
   currentView: "home",   // "home" or "list"
   typeFilter: "All",
 };
 
 let GLOBAL_BASE_CURRENCY = "USD";
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function escapeAttr(value) {
+  return escapeHtml(value);
+}
+
+function escapeJsString(value) {
+  return String(value ?? "")
+    .replace(/\\/g, "\\\\")
+    .replace(/'/g, "\\'")
+    .replace(/\r/g, "\\r")
+    .replace(/\n/g, "\\n")
+    .replace(/</g, "\\x3C")
+    .replace(/>/g, "\\x3E");
+}
+
+async function getErrorMessage(response) {
+  const contentType = response.headers.get("content-type") || "";
+  if (contentType.includes("application/json")) {
+    const data = await response.json().catch(() => null);
+    if (typeof data?.detail === "string") return data.detail;
+    if (typeof data?.message === "string") return data.message;
+  }
+
+  const text = await response.text().catch(() => "");
+  return text || `Request failed (${response.status})`;
+}
+
+async function apiFetch(url, options = {}) {
+  const response = await fetch(url, options);
+  if (!response.ok) {
+    throw new Error(await getErrorMessage(response));
+  }
+  return response;
+}
+
+async function apiFetchJson(url, options = {}) {
+  const response = await apiFetch(url, options);
+  if (response.status === 204) return null;
+  return response.json();
+}
+
+function abortPendingLoads() {
+  Object.values(state.pendingControllers).forEach(controller => controller.abort());
+  state.pendingLoads = {};
+  state.pendingControllers = {};
+}
+
+function resetDataCaches() {
+  state.dataEpoch += 1;
+  abortPendingLoads();
+  state.cache = {};
+  state.fxCache = {};
+}
 
 // ═══════════════════════════════════════════
 //  MOBILE NAV
@@ -49,12 +114,12 @@ function buildSidebar() {
   }
 
   for (const cat in grouped) {
-    html += `<div class="sidebar-section">${cat}</div>`;
+    html += `<div class="sidebar-section">${escapeHtml(cat)}</div>`;
     for (const item of grouped[cat]) {
       const id = item.id;
       const list = item.list;
-      html += `<button class="list-btn${state.activeList === id && state.currentView === 'list' ? ' active' : ''}" data-list="${id}" onclick="switchList('${id}')">
-        <span>${list.shortName}</span>
+      html += `<button class="list-btn${state.activeList === id && state.currentView === 'list' ? ' active' : ''}" data-list="${escapeAttr(id)}" onclick="switchList('${escapeJsString(id)}')">
+        <span>${escapeHtml(list.shortName)}</span>
         <span class="count">${list.items.length}</span>
       </button>`;
     }
@@ -112,14 +177,14 @@ function renderHomepage() {
   const grid = document.getElementById("home-grid");
   let html = "";
   for (const [id, list] of Object.entries(LISTS)) {
-    html += `<div class="wl-card" onclick="switchList('${id}')">
-      <button class="wl-card-edit" onclick="event.stopPropagation();openListEditModal('${id}')" title="Edit list">✎</button>
-      <div class="wl-card-name">${list.name}</div>
+    html += `<div class="wl-card" onclick="switchList('${escapeJsString(id)}')">
+      <button class="wl-card-edit" onclick="event.stopPropagation();openListEditModal('${escapeJsString(id)}')" title="Edit list">✎</button>
+      <div class="wl-card-name">${escapeHtml(list.name)}</div>
       <div class="wl-card-meta">
         <span class="wl-card-count">${list.items.length} tickers</span>
-        <span class="wl-card-category">${list.category}</span>
+        <span class="wl-card-category">${escapeHtml(list.category)}</span>
       </div>
-      ${list.description ? `<div class="wl-card-desc">${list.description}</div>` : ""}
+      ${list.description ? `<div class="wl-card-desc">${escapeHtml(list.description)}</div>` : ""}
     </div>`;
   }
   html += `<div class="wl-card-new" onclick="openCreateListModal()">
@@ -165,10 +230,12 @@ function renderTagColorsEditor() {
   for (const [tag, colors] of Object.entries(TAG_COLORS)) {
     const hex = hexFromTagColors(colors);
     const preview = autoGenerateTagColors(hex);
+    const safeTag = escapeHtml(tag);
+    const safeTagJs = escapeJsString(tag);
     html += `<div class="tag-color-row">
-      <span class="tag-color-preview" style="background:${preview.bg};color:${preview.text};border:1px solid ${preview.border}">${tag}</span>
-      <input type="color" class="tag-color-input" value="${hex}" data-tag="${tag}" onchange="updateTagColor('${tag}', this.value)" />
-      <button class="tag-color-del" onclick="deleteTagColor('${tag}')" title="Delete">✕</button>
+      <span class="tag-color-preview" style="background:${escapeAttr(preview.bg)};color:${escapeAttr(preview.text)};border:1px solid ${escapeAttr(preview.border)}">${safeTag}</span>
+      <input type="color" class="tag-color-input" value="${escapeAttr(hex)}" data-tag="${escapeAttr(tag)}" onchange="updateTagColor('${safeTagJs}', this.value)" />
+      <button class="tag-color-del" onclick="deleteTagColor('${safeTagJs}')" title="Delete">✕</button>
     </div>`;
   }
   html += `</div>`;
@@ -178,7 +245,7 @@ function renderTagColorsEditor() {
 async function updateTagColor(tag, hex) {
   const colors = autoGenerateTagColors(hex);
   try {
-    await fetch(`/api/tag-colors/${encodeURIComponent(tag)}`, {
+    await apiFetch(`/api/tag-colors/${encodeURIComponent(tag)}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(colors)
@@ -191,7 +258,7 @@ async function updateTagColor(tag, hex) {
 async function deleteTagColor(tag) {
   if (!confirm(`Remove color for "${tag}"?`)) return;
   try {
-    await fetch(`/api/tag-colors/${encodeURIComponent(tag)}`, { method: "DELETE" });
+    await apiFetch(`/api/tag-colors/${encodeURIComponent(tag)}`, { method: "DELETE" });
     delete TAG_COLORS[tag];
     renderTagColorsEditor();
   } catch (e) { alert("Error: " + e.message); }
@@ -203,7 +270,7 @@ async function addTagColor() {
   if (!name) return alert("Tag name is required.");
   const colors = autoGenerateTagColors(hex);
   try {
-    await fetch(`/api/tag-colors/${encodeURIComponent(name)}`, {
+    await apiFetch(`/api/tag-colors/${encodeURIComponent(name)}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(colors)
@@ -264,7 +331,7 @@ async function saveListFromModal() {
     const slug = short_name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
     if (!slug) return alert("Short Name must contain letters or numbers.");
     try {
-      await fetch("/api/lists", {
+      await apiFetch("/api/lists", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ slug, name, short_name, category, description, tag: "", currency: GLOBAL_BASE_CURRENCY, show_type })
@@ -275,7 +342,7 @@ async function saveListFromModal() {
   } else {
     // Update existing
     try {
-      await fetch(`/api/lists/${_editingListSlug}`, {
+      await apiFetch(`/api/lists/${_editingListSlug}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name, short_name, category, description, tag: LISTS[_editingListSlug]?.tag || "", show_type })
@@ -290,7 +357,7 @@ async function deleteListFromModal() {
   if (!_editingListSlug || _editingListSlug === "__new__") return;
   if (!confirm(`Delete the entire "${LISTS[_editingListSlug].name}" list?`)) return;
   try {
-    await fetch(`/api/lists/${_editingListSlug}`, { method: "DELETE" });
+    await apiFetch(`/api/lists/${_editingListSlug}`, { method: "DELETE" });
     closeListEditModal();
     await refreshApp();
   } catch (e) { alert("Error: " + e.message); }
@@ -331,7 +398,7 @@ function setStatus(html, type) {
   const txt = document.getElementById("status-text");
   bar.className = "s-" + type;
   bar.querySelector(".spinner").style.display = type === "load" ? "block" : "none";
-  txt.innerHTML = html;
+  txt.textContent = html;
 }
 
 // Parse API response points (date strings → Date objects)
@@ -339,6 +406,10 @@ function parsePoints(arr) {
   if (!arr) return null;
   return arr.map(p => ({ date: new Date(p.date), close: p.close }))
     .filter(p => p.close !== null && !isNaN(p.close));
+}
+
+function hasEnoughPoints(points) {
+  return Array.isArray(points) && points.length >= 2;
 }
 
 function closestAfter(points, targetDate) {
@@ -372,6 +443,8 @@ function getMonthlyReturns(points) {
 // ═══════════════════════════════════════════
 async function loadData(listId) {
   const list = LISTS[listId];
+  if (!list) return;
+
   const sb = document.getElementById("status-bar");
   sb.querySelector(".spinner").style.display = "block";
   sb.className = "s-load";
@@ -380,65 +453,125 @@ async function loadData(listId) {
 
   // Use cache if available
   if (state.cache[listId]) {
-    finishLoad(listId);
+    const hasFailures = list.items.some(item => !hasEnoughPoints(state.cache[listId][item.ticker]));
+    if (!hasFailures) {
+      finishLoad(listId);
+      return;
+    }
+    delete state.cache[listId];
+  }
+
+  if (state.pendingLoads[listId]) {
+    await state.pendingLoads[listId];
+    if (state.activeList === listId && state.cache[listId]) finishLoad(listId);
     return;
   }
 
-  state.cache[listId] = {};
-  try {
-    // 1. Identify all tickers + FX pairs needed
-    const stockTickers = list.items.map(s => s.ticker);
+  const controller = new AbortController();
+  const epoch = state.dataEpoch;
+  state.pendingControllers[listId] = controller;
 
-    const foreignCurrencies = [...new Set(
-      list.items
-        .map(s => s.currency)
-        .filter(c => c && c !== GLOBAL_BASE_CURRENCY && c !== "USX")
-    )];
+  const loadPromise = (async () => {
+    try {
+      // 1. Identify all tickers + FX pairs needed
+      const stockTickers = list.items.map(s => s.ticker);
 
-    const fxTickers = foreignCurrencies.map(cur => {
-      const prefix = cur === "GBp" ? "GBP" : cur;
-      return `${prefix}${GLOBAL_BASE_CURRENCY}=X`;
-    }).filter(t => !state.fxCache[t]); // skip already cached FX
+      const foreignCurrencies = [...new Set(
+        list.items
+          .map(s => s.currency)
+          .filter(c => c && c !== GLOBAL_BASE_CURRENCY && c !== "USX")
+      )];
 
-    const allTickers = [...stockTickers, ...fxTickers];
+      const fxTickers = foreignCurrencies.map(cur => {
+        const prefix = cur === "GBp" ? "GBP" : cur;
+        return `${prefix}${GLOBAL_BASE_CURRENCY}=X`;
+      }).filter(t => !state.fxCache[t]);
 
-    if (state.activeList === listId) {
-      document.getElementById("status-text").textContent = `Fetching ${stockTickers.length} tickers + ${fxTickers.length} FX rates…`;
+      const allTickers = [...stockTickers, ...fxTickers];
+
+      if (state.activeList === listId) {
+        document.getElementById("status-text").textContent = `Fetching ${stockTickers.length} tickers + ${fxTickers.length} FX rates…`;
+      }
+
+      const priceData = await apiFetchJson("/api/prices", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tickers: allTickers }),
+        signal: controller.signal
+      });
+      if (epoch !== state.dataEpoch) return;
+
+      const listCache = {};
+      stockTickers.forEach(t => {
+        listCache[t] = parsePoints(priceData[t]);
+      });
+
+      fxTickers.forEach(t => {
+        state.fxCache[t] = parsePoints(priceData[t]);
+      });
+
+      const missingStockTickers = stockTickers.filter(t => !hasEnoughPoints(listCache[t]));
+      const missingFxTickers = fxTickers.filter(t => !hasEnoughPoints(state.fxCache[t]));
+      if (missingStockTickers.length > 0 || missingFxTickers.length > 0) {
+        const retryTickers = [...new Set([...missingStockTickers, ...missingFxTickers])];
+        const retryData = await apiFetchJson("/api/prices", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ tickers: retryTickers }),
+          signal: controller.signal
+        });
+        if (epoch !== state.dataEpoch) return;
+
+        missingStockTickers.forEach(t => {
+          const retriedPoints = parsePoints(retryData[t]);
+          if (hasEnoughPoints(retriedPoints)) {
+            listCache[t] = retriedPoints;
+          }
+        });
+
+        missingFxTickers.forEach(t => {
+          const retriedPoints = parsePoints(retryData[t]);
+          if (hasEnoughPoints(retriedPoints)) {
+            state.fxCache[t] = retriedPoints;
+          }
+        });
+      }
+
+      state.cache[listId] = listCache;
+    } catch (e) {
+      if (e.name === "AbortError") return;
+
+      delete state.cache[listId];
+      if (state.activeList === listId && epoch === state.dataEpoch) {
+        sb.className = "s-err";
+        sb.querySelector(".spinner").style.display = "none";
+        const statusText = document.getElementById("status-text");
+        statusText.textContent = `⚠ ${e.message}`;
+        const retryBtn = document.createElement("button");
+        retryBtn.className = "retry-btn";
+        retryBtn.textContent = "↻ Retry";
+        retryBtn.onclick = () => loadData(listId);
+        statusText.appendChild(document.createTextNode(" "));
+        statusText.appendChild(retryBtn);
+      }
+    } finally {
+      delete state.pendingLoads[listId];
+      delete state.pendingControllers[listId];
     }
+  })();
 
-    // 2. Single batch request to server
-    const res = await fetch("/api/prices", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ tickers: allTickers })
-    });
-    const priceData = await res.json();
-
-    // 3. Populate caches
-    stockTickers.forEach(t => {
-      state.cache[listId][t] = parsePoints(priceData[t]);
-    });
-
-    fxTickers.forEach(t => {
-      state.fxCache[t] = parsePoints(priceData[t]);
-    });
-
-    if (state.activeList === listId) finishLoad(listId);
-  } catch (e) {
-    if (state.activeList === listId) {
-      sb.className = "s-err";
-      sb.querySelector(".spinner").style.display = "none";
-      document.getElementById("status-text").innerHTML =
-        "⚠ " + e.message + ` <button class="retry-btn" onclick="delete state.cache['${listId}'];loadData('${listId}')">↻ Retry</button>`;
-    }
-  }
+  state.pendingLoads[listId] = loadPromise;
+  await loadPromise;
+  if (state.activeList === listId && state.cache[listId]) finishLoad(listId);
 }
 
 function finishLoad(listId) {
+  if (state.activeList !== listId || !LISTS[listId] || !state.cache[listId]) return;
+
   const sb = document.getElementById("status-bar");
   const cache = state.cache[listId];
   const list = LISTS[listId];
-  const failed = list.items.filter(s => !cache[s.ticker]);
+  const failed = list.items.filter(s => !hasEnoughPoints(cache[s.ticker]));
   const ok = list.items.length - failed.length;
 
   document.getElementById("updated-label").textContent = "Updated: " + new Date().toLocaleTimeString();
@@ -492,7 +625,7 @@ function buildControls() {
 
     let optionsHtml = `<option value="All">All Types</option>\n`;
     sortedTags.forEach(tag => {
-      optionsHtml += `<option value="${tag}">${tag}</option>\n`;
+      optionsHtml += `<option value="${escapeAttr(tag)}">${escapeHtml(tag)}</option>\n`;
     });
     typeSelect.innerHTML = optionsHtml;
     typeSelect.value = state.typeFilter;
@@ -525,7 +658,7 @@ function getScored() {
 
   return list.items.map(s => {
     let pts = cache[s.ticker];
-    if (!pts || pts.length < 2) return { ...s, score: null, currentPrice: null, basePrice: null, baseDate: null, monthly: [] };
+    if (!hasEnoughPoints(pts)) return { ...s, score: null, currentPrice: null, basePrice: null, baseDate: null, monthly: [] };
 
     if (!pts._processed) {
       pts._processed = true;
@@ -618,8 +751,8 @@ function render() {
   selected.forEach(s => {
     hEl.innerHTML += `<div class="hcard">
       <div>
-        <div style="font-weight: 400;font-size:14px;color:#68d391">${s.ticker}</div>
-        <div style="font-size:11px;color:#718096">${s.name}</div>
+        <div style="font-weight: 400;font-size:14px;color:#68d391">${escapeHtml(s.ticker)}</div>
+        <div style="font-size:11px;color:#718096">${escapeHtml(s.name)}</div>
       </div>
       <div style="font-family:'Google Sans Code', monospace;font-size:13px;margin-left:8px;color:${retTextColor(s.score)}">${fmtPct(s.score)}</div>
     </div>`;
@@ -640,22 +773,22 @@ function render() {
     const bCls = isBuy ? "rb-buy" : (s.rank <= state.topN + 2 ? "rb-near" : "rb-rest");
     const barPct = s.score !== null ? Math.min(Math.abs(s.score) / 25 * 100, 100) : 0;
     const barCol = s.score !== null && s.score >= 0 ? "#68d391" : "#fc8181";
-    const priceStr = s.currentPrice ? sym + s.currentPrice.toFixed(2) : "—";
+    const priceStr = s.currentPrice !== null && s.currentPrice !== undefined ? sym + s.currentPrice.toFixed(2) : "—";
     const baseDateStr = s.baseDate ? s.baseDate.toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "";
     const typeCellStyle = list.showType === false ? 'style="display:none"' : "";
     tbody.innerHTML += `<tr style="background:${rowBg}">
       <td><span class="rb ${bCls}">${s.rank}</span></td>
-      <td><div style="display:flex;align-items:center;gap:8px"><span>${s.name}</span></div></td>
-      <td><span class="ticker">${s.ticker}</span></td>
-      <td ${typeCellStyle}><span class="tag" style="${getTagStyle(s.tag)}">${s.tag}</span></td>
+      <td><div style="display:flex;align-items:center;gap:8px"><span>${escapeHtml(s.name)}</span></div></td>
+      <td><span class="ticker">${escapeHtml(s.ticker)}</span></td>
+      <td ${typeCellStyle}><span class="tag" style="${escapeAttr(getTagStyle(s.tag))}">${escapeHtml(s.tag)}</span></td>
       <td>
         <div class="bar-wrap">
           <div class="bar-track"><div class="bar-fill" style="width:${barPct}%;background:${barCol}"></div></div>
           <span class="mono" style="font-weight: 400;color:${retTextColor(s.score)}">${fmtPct(s.score)}</span>
         </div>
-        ${s.basePrice ? `<div class="price-info">from ${sym}${s.basePrice.toFixed(2)} on ${baseDateStr}</div>` : ""}
+        ${s.basePrice ? `<div class="price-info">from ${escapeHtml(sym)}${s.basePrice.toFixed(2)} on ${escapeHtml(baseDateStr)}</div>` : ""}
       </td>
-      <td><span class="mono" style="color:#a0aec0">${priceStr}</span></td>
+      <td><span class="mono" style="color:#a0aec0">${escapeHtml(priceStr)}</span></td>
       <td>${isBuy ? '<span class="sig-buy">● BUY</span>' : '<span class="sig-skip">○ SKIP</span>'}</td>
     </tr>`;
   });
@@ -665,7 +798,7 @@ function render() {
   const hmHdr = document.getElementById("hm-hdr");
   hmHdr.innerHTML = `<th style="font-family:'Google Sans Code', monospace;padding:16px 20px;text-align:left;background:transparent;border-bottom:1px solid var(--border-subtle);font-size:10px;color:var(--text-tertiary);text-transform:uppercase;letter-spacing:.15em;min-width:165px">Name</th>`;
   allMonthLabels.forEach(m => {
-    hmHdr.innerHTML += `<th style="font-family:'Google Sans Code', monospace;padding:16px 6px;text-align:center;background:transparent;border-bottom:1px solid var(--border-subtle);font-size:10px;color:var(--text-tertiary);text-transform:uppercase;min-width:48px">${m}</th>`;
+    hmHdr.innerHTML += `<th style="font-family:'Google Sans Code', monospace;padding:16px 6px;text-align:center;background:transparent;border-bottom:1px solid var(--border-subtle);font-size:10px;color:var(--text-tertiary);text-transform:uppercase;min-width:48px">${escapeHtml(m)}</th>`;
   });
   hmHdr.innerHTML += `<th style="font-family:'Google Sans Code', monospace;padding:16px 10px;text-align:center;background:transparent;border-bottom:1px solid var(--border-subtle);font-size:10px;color:var(--accent-positive);text-transform:uppercase;letter-spacing:.15em">12M</th>`;
 
@@ -690,8 +823,8 @@ function render() {
       <td style="padding:14px 20px;white-space:nowrap;border-bottom:1px solid var(--border-subtle)">
         <div style="display:flex;align-items:center;gap:8px">
           <div>
-            <div class="ticker" style="font-size:12px">${s.ticker}</div>
-            <div style="font-size:11px;color:#4a5568">${s.name}</div>
+            <div class="ticker" style="font-size:12px">${escapeHtml(s.ticker)}</div>
+            <div style="font-size:11px;color:#4a5568">${escapeHtml(s.name)}</div>
           </div>
         </div>
       </td>
@@ -734,10 +867,10 @@ function renderEditorTickers() {
     row.className = "ed-ticker-row";
     row.innerHTML = `
       <span style="color:#4a5568;font-size:10px;width:24px;">${i + 1}</span>
-      <input class="ed-sym" value="${t.ticker}" data-id="${t.id}" data-field="symbol" />
-      <input class="ed-name" value="${t.name}" data-id="${t.id}" data-field="name" />
-      <input class="ed-tag" value="${t.tag}" data-id="${t.id}" data-field="tag" />
-      <input class="ed-cur" value="${t.currency}" data-id="${t.id}" data-field="currency" maxlength="3" />
+      <input class="ed-sym" value="${escapeAttr(t.ticker)}" data-id="${t.id}" data-field="symbol" />
+      <input class="ed-name" value="${escapeAttr(t.name)}" data-id="${t.id}" data-field="name" />
+      <input class="ed-tag" value="${escapeAttr(t.tag)}" data-id="${t.id}" data-field="tag" />
+      <input class="ed-cur" value="${escapeAttr(t.currency)}" data-id="${t.id}" data-field="currency" maxlength="3" />
       <button class="ed-btn-save" onclick="saveTicker(${t.id}, this)">Save</button>
       <button class="ed-btn-del" onclick="deleteTicker(${t.id})">✕</button>
     `;
@@ -751,17 +884,16 @@ function renderEditorTickers() {
 async function saveBaseCurrency() {
   const val = document.getElementById("home-currency-input").value;
   try {
-    await fetch("/api/settings/GLOBAL_BASE_CURRENCY", {
+    await apiFetch("/api/settings/GLOBAL_BASE_CURRENCY", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ value: val })
     });
     // Also clear the server-side price cache so FX rates are fetched immediately
-    await fetch("/api/prices/cache", { method: "DELETE" });
+    await apiFetch("/api/prices/cache", { method: "DELETE" });
 
     GLOBAL_BASE_CURRENCY = val;
-    state.cache = {};
-    state.fxCache = {};
+    resetDataCaches();
 
     // If we're looking at a list, actively reload it
     if (state.currentView === "list" && state.activeList) {
@@ -775,8 +907,7 @@ async function saveBaseCurrency() {
 // ═══════════════════════════════════════════
 async function loadLists() {
   try {
-    const res = await fetch("/api/init");
-    const data = await res.json();
+    const data = await apiFetchJson("/api/init");
     LISTS = data.lists;
     TAG_COLORS = data.tagColors;
     return data.settings;
@@ -792,8 +923,7 @@ async function refreshApp() {
     GLOBAL_BASE_CURRENCY = settings.GLOBAL_BASE_CURRENCY || "USD";
 
     // clear caches since data changed
-    state.cache = {};
-    state.fxCache = {};
+    resetDataCaches();
 
     buildSidebar();
 
@@ -817,7 +947,7 @@ async function saveTicker(id, btn) {
     body[inp.dataset.field] = inp.value;
   });
   try {
-    await fetch(`/api/tickers/${id}`, {
+    await apiFetch(`/api/tickers/${id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body)
@@ -829,10 +959,10 @@ async function saveTicker(id, btn) {
     const list = LISTS[state.activeList];
     const item = list.items.find(t => t.id === id);
     if (item) {
-      if (body.symbol) item.ticker = body.symbol;
-      if (body.name) item.name = body.name;
-      if (body.tag) item.tag = body.tag;
-      if (body.currency) item.currency = body.currency;
+      item.ticker = body.symbol;
+      item.name = body.name;
+      item.tag = body.tag;
+      item.currency = body.currency;
     }
     delete state.cache[state.activeList];
     state.fxCache = {};
@@ -842,7 +972,7 @@ async function saveTicker(id, btn) {
 async function deleteTicker(id) {
   if (!confirm("Remove this ticker?")) return;
   try {
-    await fetch(`/api/tickers/${id}`, { method: "DELETE" });
+    await apiFetch(`/api/tickers/${id}`, { method: "DELETE" });
     const list = LISTS[state.activeList];
     list.items = list.items.filter(t => t.id !== id);
     delete state.cache[state.activeList];
@@ -859,12 +989,11 @@ async function addTicker() {
   const currency = document.getElementById("ed-add-cur").value.trim().toUpperCase() || "USD";
   if (!symbol || !name) return alert("Symbol and Name are required.");
   try {
-    const res = await fetch(`/api/lists/${slug}/tickers`, {
+    const data = await apiFetchJson(`/api/lists/${slug}/tickers`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ symbol, name, tag, currency })
     });
-    const data = await res.json();
     LISTS[slug].items.push({ id: data.id, ticker: symbol, name, tag, currency });
     document.getElementById("ed-add-symbol").value = "";
     document.getElementById("ed-add-name").value = "";
@@ -881,8 +1010,7 @@ async function addTicker() {
 // ═══════════════════════════════════════════
 async function initApp() {
   try {
-    const res = await fetch('/api/init');
-    const data = await res.json();
+    const data = await apiFetchJson('/api/init');
 
     LISTS = data.lists;
     TAG_COLORS = data.tagColors;
