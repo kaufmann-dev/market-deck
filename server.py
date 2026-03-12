@@ -73,6 +73,18 @@ class TagColorUpdate(BaseModel):
     text: str
     border: str
 
+def _clean_category(category: Optional[str]) -> str:
+    cleaned = " ".join((category or "").split())
+    return cleaned or "Other"
+
+def _canonicalize_category(conn, category: Optional[str]) -> str:
+    cleaned = _clean_category(category)
+    row = conn.execute(
+        "SELECT category FROM watchlists WHERE category = ? COLLATE NOCASE LIMIT 1",
+        (cleaned,),
+    ).fetchone()
+    return row["category"] if row else cleaned
+
 # ══════════════════════════════════════
 #  API: INIT (single call to bootstrap frontend)
 # ══════════════════════════════════════
@@ -138,10 +150,11 @@ def update_setting(key: str, body: SettingUpdate):
 def create_list(body: WatchlistCreate):
     with get_db() as conn:
         try:
+            category = _canonicalize_category(conn, body.category)
             cur = conn.execute("""
                 INSERT INTO watchlists (slug, name, short_name, category, description, tag, currency, show_type)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """, (body.slug, body.name, body.short_name, body.category, body.description, body.tag, body.currency, int(body.show_type)))
+            """, (body.slug, body.name, body.short_name, category, body.description, body.tag, body.currency, int(body.show_type)))
             conn.commit()
             return {"id": cur.lastrowid, "slug": body.slug}
         except sqlite3.IntegrityError:
@@ -156,6 +169,8 @@ def update_list(slug: str, body: WatchlistUpdate):
         updates = {k: v for k, v in body.model_dump().items() if v is not None}
         if not updates:
             raise HTTPException(400, "No fields to update")
+        if "category" in updates:
+            updates["category"] = _canonicalize_category(conn, updates["category"])
         # map short_name -> short_name column
         col_map = {"short_name": "short_name", "show_type": "show_type"}
         
