@@ -55,7 +55,7 @@
         <div class="home-section-title">Tag Colors</div>
         <div id="tag-colors-editor"></div>
         <div class="tag-add-row">
-          <input id="tag-new-name" type="text" placeholder="Tag name" />
+          <input id="tag-new-name" type="text" placeholder="TAG NAME" oninput="this.value = this.value.toUpperCase()" />
           <input id="tag-new-color" type="color" value="#68d391" />
           <button onclick="addTagColor()">+ Add</button>
         </div>

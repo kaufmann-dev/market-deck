@@ -11,6 +11,7 @@ Market Deck is a local dashboard for ranking financial assets by momentum and vi
 - Built-in CRUD UI for watchlists, tickers, and tag colors
 - Server-side price fetching with caching and safer request handling
 - Watchlist categories are stored and edited in uppercase
+- Tag color names are stored and edited in uppercase
 
 ## Stack
 
