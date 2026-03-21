@@ -90,8 +90,20 @@ function normalizeCategoryValue(category) {
   return (cleaned || "Other").toUpperCase();
 }
 
+function normalizeTagValue(tag) {
+  return String(tag ?? "").trim().replace(/\s+/g, " ").toUpperCase();
+}
+
 function categoryKey(category) {
   return normalizeCategoryValue(category).toLocaleLowerCase();
+}
+
+function normalizeTagColors(tagColors) {
+  const normalized = {};
+  for (const [tag, colors] of Object.entries(tagColors || {})) {
+    normalized[normalizeTagValue(tag)] = colors;
+  }
+  return normalized;
 }
 
 // ═══════════════════════════════════════════
@@ -254,29 +266,31 @@ function renderTagColorsEditor() {
 }
 
 async function updateTagColor(tag, hex) {
+  const normalizedTag = normalizeTagValue(tag);
   const colors = autoGenerateTagColors(hex);
   try {
-    await apiFetch(`/api/tag-colors/${encodeURIComponent(tag)}`, {
+    await apiFetch(`/api/tag-colors/${encodeURIComponent(normalizedTag)}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(colors)
     });
-    TAG_COLORS[tag] = colors;
+    TAG_COLORS[normalizedTag] = colors;
     renderTagColorsEditor();
   } catch (e) { alert("Error: " + e.message); }
 }
 
 async function deleteTagColor(tag) {
-  if (!confirm(`Remove color for "${tag}"?`)) return;
+  const normalizedTag = normalizeTagValue(tag);
+  if (!confirm(`Remove color for "${normalizedTag}"?`)) return;
   try {
-    await apiFetch(`/api/tag-colors/${encodeURIComponent(tag)}`, { method: "DELETE" });
-    delete TAG_COLORS[tag];
+    await apiFetch(`/api/tag-colors/${encodeURIComponent(normalizedTag)}`, { method: "DELETE" });
+    delete TAG_COLORS[normalizedTag];
     renderTagColorsEditor();
   } catch (e) { alert("Error: " + e.message); }
 }
 
 async function addTagColor() {
-  const name = document.getElementById("tag-new-name").value.trim();
+  const name = normalizeTagValue(document.getElementById("tag-new-name").value);
   const hex = document.getElementById("tag-new-color").value;
   if (!name) return alert("Tag name is required.");
   const colors = autoGenerateTagColors(hex);
@@ -397,7 +411,7 @@ function currencySymbol(c) {
 }
 
 function getTagStyle(tag) {
-  const c = TAG_COLORS[tag];
+  const c = TAG_COLORS[normalizeTagValue(tag)];
   if (c) return `background:${c.bg};color:${c.text};border:1px solid ${c.border}`;
 
   // Hardcoded fallback for "Other" or any unknown tag
@@ -920,7 +934,7 @@ async function loadLists() {
   try {
     const data = await apiFetchJson("/api/init");
     LISTS = data.lists;
-    TAG_COLORS = data.tagColors;
+    TAG_COLORS = normalizeTagColors(data.tagColors);
     return data.settings;
   } catch (e) {
     console.error("Failed to load lists:", e);
@@ -1024,7 +1038,7 @@ async function initApp() {
     const data = await apiFetchJson('/api/init');
 
     LISTS = data.lists;
-    TAG_COLORS = data.tagColors;
+    TAG_COLORS = normalizeTagColors(data.tagColors);
     GLOBAL_BASE_CURRENCY = data.settings.GLOBAL_BASE_CURRENCY || "USD";
 
     buildSidebar();
