@@ -470,20 +470,30 @@ async function loadData(listId) {
   const list = LISTS[listId];
   if (!list) return;
 
+  const stockTickers = list.items.map(s => s.ticker);
+  const foreignCurrencies = [...new Set(
+    list.items
+      .map(s => s.currency)
+      .filter(c => c && c !== GLOBAL_BASE_CURRENCY && c !== "USX")
+  )];
+  const requiredFxTickers = foreignCurrencies.map(cur => {
+    const prefix = cur === "GBp" ? "GBP" : cur;
+    return `${prefix}${GLOBAL_BASE_CURRENCY}=X`;
+  });
+
   const sb = document.getElementById("status-bar");
   sb.querySelector(".spinner").style.display = "block";
   sb.className = "s-load";
   document.getElementById("status-text").textContent = `Fetching live data for ${list.shortName}…`;
   document.getElementById("app").style.display = "none";
 
-  // Use cache if available
-  if (state.cache[listId]) {
-    const hasFailures = list.items.some(item => !hasEnoughPoints(state.cache[listId][item.ticker]));
-    if (!hasFailures) {
+  const existingListCache = state.cache[listId] || {};
+  const retryStockTickers = stockTickers.filter(t => !hasEnoughPoints(existingListCache[t]));
+  const retryFxTickers = requiredFxTickers.filter(t => !hasEnoughPoints(state.fxCache[t]));
+
+  if (state.cache[listId] && retryStockTickers.length === 0 && retryFxTickers.length === 0) {
       finishLoad(listId);
       return;
-    }
-    delete state.cache[listId];
   }
 
   if (state.pendingLoads[listId]) {
@@ -498,24 +508,16 @@ async function loadData(listId) {
 
   const loadPromise = (async () => {
     try {
-      // 1. Identify all tickers + FX pairs needed
-      const stockTickers = list.items.map(s => s.ticker);
-
-      const foreignCurrencies = [...new Set(
-        list.items
-          .map(s => s.currency)
-          .filter(c => c && c !== GLOBAL_BASE_CURRENCY && c !== "USX")
-      )];
-
-      const fxTickers = foreignCurrencies.map(cur => {
-        const prefix = cur === "GBp" ? "GBP" : cur;
-        return `${prefix}${GLOBAL_BASE_CURRENCY}=X`;
-      }).filter(t => !state.fxCache[t]);
-
-      const allTickers = [...stockTickers, ...fxTickers];
+      const allTickers = [...retryStockTickers, ...retryFxTickers];
+      const listCache = { ...existingListCache };
 
       if (state.activeList === listId) {
-        document.getElementById("status-text").textContent = `Fetching ${stockTickers.length} tickers + ${fxTickers.length} FX rates…`;
+        document.getElementById("status-text").textContent = `Fetching ${retryStockTickers.length} tickers + ${retryFxTickers.length} FX rates…`;
+      }
+
+      if (allTickers.length === 0) {
+        state.cache[listId] = listCache;
+        return;
       }
 
       const priceData = await apiFetchJson("/api/prices", {
@@ -526,17 +528,16 @@ async function loadData(listId) {
       });
       if (epoch !== state.dataEpoch) return;
 
-      const listCache = {};
-      stockTickers.forEach(t => {
+      retryStockTickers.forEach(t => {
         listCache[t] = parsePoints(priceData[t]);
       });
 
-      fxTickers.forEach(t => {
+      retryFxTickers.forEach(t => {
         state.fxCache[t] = parsePoints(priceData[t]);
       });
 
-      const missingStockTickers = stockTickers.filter(t => !hasEnoughPoints(listCache[t]));
-      const missingFxTickers = fxTickers.filter(t => !hasEnoughPoints(state.fxCache[t]));
+      const missingStockTickers = retryStockTickers.filter(t => !hasEnoughPoints(listCache[t]));
+      const missingFxTickers = retryFxTickers.filter(t => !hasEnoughPoints(state.fxCache[t]));
       if (missingStockTickers.length > 0 || missingFxTickers.length > 0) {
         const retryTickers = [...new Set([...missingStockTickers, ...missingFxTickers])];
         const retryData = await apiFetchJson("/api/prices", {
