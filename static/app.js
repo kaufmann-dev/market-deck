@@ -13,6 +13,7 @@ let state = {
   topN: 3,
   view: "r",
   cache: {},       // { listId: { ticker: [points] } }
+  tickerCache: {}, // { "AAPL": [points] }
   fxCache: {},     // { "EURUSD=X": [points], etc }
   pendingLoads: {}, // { listId: Promise<void> }
   pendingControllers: {}, // { listId: AbortController }
@@ -78,11 +79,13 @@ function abortPendingLoads() {
   state.pendingControllers = {};
 }
 
-function resetDataCaches() {
+function resetDataCaches(options = {}) {
+  const { preserveTickerCache = false, preserveFxCache = false } = options;
   state.dataEpoch += 1;
   abortPendingLoads();
   state.cache = {};
-  state.fxCache = {};
+  if (!preserveTickerCache) state.tickerCache = {};
+  if (!preserveFxCache) state.fxCache = {};
 }
 
 function normalizeCategoryValue(category) {
@@ -437,6 +440,11 @@ function hasEnoughPoints(points) {
   return Array.isArray(points) && points.length >= 2;
 }
 
+function clonePoints(points) {
+  if (!Array.isArray(points)) return points;
+  return points.map(point => ({ date: point.date, close: point.close }));
+}
+
 function closestAfter(points, targetDate) {
   for (let i = 0; i < points.length; i++) {
     if (points[i].date >= targetDate) return points[i];
@@ -487,7 +495,12 @@ async function loadData(listId) {
   document.getElementById("status-text").textContent = `Fetching live data for ${list.shortName}…`;
   document.getElementById("app").style.display = "none";
 
-  const existingListCache = state.cache[listId] || {};
+  const existingListCache = { ...(state.cache[listId] || {}) };
+  stockTickers.forEach(ticker => {
+    if (!hasEnoughPoints(existingListCache[ticker]) && hasEnoughPoints(state.tickerCache[ticker])) {
+      existingListCache[ticker] = clonePoints(state.tickerCache[ticker]);
+    }
+  });
   const retryStockTickers = stockTickers.filter(t => !hasEnoughPoints(existingListCache[t]));
   const retryFxTickers = requiredFxTickers.filter(t => !hasEnoughPoints(state.fxCache[t]));
 
@@ -529,7 +542,13 @@ async function loadData(listId) {
       if (epoch !== state.dataEpoch) return;
 
       retryStockTickers.forEach(t => {
-        listCache[t] = parsePoints(priceData[t]);
+        const points = parsePoints(priceData[t]);
+        listCache[t] = points;
+        if (hasEnoughPoints(points)) {
+          state.tickerCache[t] = clonePoints(points);
+        } else {
+          delete state.tickerCache[t];
+        }
       });
 
       retryFxTickers.forEach(t => {
@@ -552,6 +571,9 @@ async function loadData(listId) {
           const retriedPoints = parsePoints(retryData[t]);
           if (hasEnoughPoints(retriedPoints)) {
             listCache[t] = retriedPoints;
+            state.tickerCache[t] = clonePoints(retriedPoints);
+          } else {
+            delete state.tickerCache[t];
           }
         });
 
@@ -919,7 +941,7 @@ async function saveBaseCurrency() {
     await apiFetch("/api/prices/cache", { method: "DELETE" });
 
     GLOBAL_BASE_CURRENCY = val;
-    resetDataCaches();
+    resetDataCaches({ preserveTickerCache: true });
 
     // If we're looking at a list, actively reload it
     if (state.currentView === "list" && state.activeList) {
