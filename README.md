@@ -10,7 +10,7 @@ Market Deck is a local dashboard for ranking financial assets by momentum and vi
 - Global base currency conversion using historical FX series from Yahoo Finance
 - Built-in CRUD UI for watchlists, tickers, and tag colors
 - Server-side price fetching with caching and safer request handling
-- Watchlist categories are grouped case-insensitively in the sidebar
+- Watchlist categories are stored and edited in uppercase
 
 ## Stack
 
