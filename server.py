@@ -77,6 +77,10 @@ def _normalize_category(category: Optional[str]) -> str:
     cleaned = " ".join((category or "").split())
     return (cleaned or "Other").upper()
 
+def _normalize_tag(tag: str) -> str:
+    cleaned = " ".join(str(tag or "").split())
+    return cleaned.upper()
+
 # ══════════════════════════════════════
 #  API: INIT (single call to bootstrap frontend)
 # ══════════════════════════════════════
@@ -236,16 +240,18 @@ def delete_ticker(ticker_id: int):
 # ══════════════════════════════════════
 @app.put("/api/tag-colors/{tag}")
 def update_tag_color(tag: str, body: TagColorUpdate):
+    normalized_tag = _normalize_tag(tag)
     with get_db() as conn:
         conn.execute("INSERT OR REPLACE INTO tag_colors (tag, bg, text, border) VALUES (?, ?, ?, ?)",
-                     (tag, body.bg, body.text, body.border))
+                     (normalized_tag, body.bg, body.text, body.border))
         conn.commit()
     return {"ok": True}
 
 @app.delete("/api/tag-colors/{tag}")
 def delete_tag_color(tag: str):
+    normalized_tag = _normalize_tag(tag)
     with get_db() as conn:
-        conn.execute("DELETE FROM tag_colors WHERE tag=?", (tag,))
+        conn.execute("DELETE FROM tag_colors WHERE tag=?", (normalized_tag,))
         conn.commit()
     return {"ok": True}
 
