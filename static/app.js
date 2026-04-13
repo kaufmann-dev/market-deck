@@ -795,16 +795,14 @@ function render() {
   document.getElementById("banner-lbl").textContent =
     "Current Holdings — Top " + state.topN + " by " + state.lb + "M Momentum · Equal Weight " + (100 / state.topN).toFixed(0) + "% each";
   const hEl = document.getElementById("holdings");
-  hEl.innerHTML = "";
-  selected.forEach(s => {
-    hEl.innerHTML += `<div class="hcard">
+  const holdingsHtml = selected.map(s => `<div class="hcard">
       <div>
         <div style="font-weight: 400;font-size:14px;color:#68d391">${escapeHtml(s.ticker)}</div>
         <div style="font-size:11px;color:#718096">${escapeHtml(s.name)}</div>
       </div>
       <div style="font-family:'Google Sans Code', monospace;font-size:13px;margin-left:8px;color:${retTextColor(s.score)}">${fmtPct(s.score)}</div>
-    </div>`;
-  });
+    </div>`);
+  hEl.innerHTML = holdingsHtml.join("");
 
   // Hide/Show 'Type' column header
   const thType = document.getElementById("r-th-type");
@@ -814,8 +812,7 @@ function render() {
 
   // Rankings table
   const tbody = document.getElementById("r-body");
-  tbody.innerHTML = "";
-  all.forEach((s, i) => {
+  const rowsHtml = all.map((s, i) => {
     const isBuy = s.rank <= state.topN && s.score !== null;
     const rowBg = isBuy ? "rgba(255, 255, 255, 0.03)" : "transparent";
     const bCls = isBuy ? "rb-buy" : (s.rank <= state.topN + 2 ? "rb-near" : "rb-rest");
@@ -824,7 +821,7 @@ function render() {
     const priceStr = s.currentPrice !== null && s.currentPrice !== undefined ? sym + s.currentPrice.toFixed(2) : "—";
     const baseDateStr = s.baseDate ? s.baseDate.toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "";
     const typeCellStyle = list.showType === false ? 'style="display:none"' : "";
-    tbody.innerHTML += `<tr style="background:${rowBg}">
+    return `<tr style="background:${rowBg}">
       <td><span class="rb ${bCls}">${s.rank}</span></td>
       <td><div style="display:flex;align-items:center;gap:8px"><span>${escapeHtml(s.name)}</span></div></td>
       <td><span class="ticker">${escapeHtml(s.ticker)}</span></td>
@@ -840,19 +837,20 @@ function render() {
       <td>${isBuy ? '<span class="sig-buy">● BUY</span>' : '<span class="sig-skip">○ SKIP</span>'}</td>
     </tr>`;
   });
+  tbody.innerHTML = rowsHtml.join("");
 
   // Heatmap
   const allMonthLabels = ranked[0]?.monthly?.map(m => m.label) || [];
   const hmHdr = document.getElementById("hm-hdr");
-  hmHdr.innerHTML = `<th style="font-family:'Google Sans Code', monospace;padding:16px 20px;text-align:left;background:transparent;border-bottom:1px solid var(--border-subtle);font-size:10px;color:var(--text-tertiary);text-transform:uppercase;letter-spacing:.15em;min-width:165px">Name</th>`;
-  allMonthLabels.forEach(m => {
-    hmHdr.innerHTML += `<th style="font-family:'Google Sans Code', monospace;padding:16px 6px;text-align:center;background:transparent;border-bottom:1px solid var(--border-subtle);font-size:10px;color:var(--text-tertiary);text-transform:uppercase;min-width:48px">${escapeHtml(m)}</th>`;
-  });
-  hmHdr.innerHTML += `<th style="font-family:'Google Sans Code', monospace;padding:16px 10px;text-align:center;background:transparent;border-bottom:1px solid var(--border-subtle);font-size:10px;color:var(--accent-positive);text-transform:uppercase;letter-spacing:.15em">12M</th>`;
+  const hmHeaderCells = [
+    `<th style="font-family:'Google Sans Code', monospace;padding:16px 20px;text-align:left;background:transparent;border-bottom:1px solid var(--border-subtle);font-size:10px;color:var(--text-tertiary);text-transform:uppercase;letter-spacing:.15em;min-width:165px">Name</th>`,
+    ...allMonthLabels.map(m => `<th style="font-family:'Google Sans Code', monospace;padding:16px 6px;text-align:center;background:transparent;border-bottom:1px solid var(--border-subtle);font-size:10px;color:var(--text-tertiary);text-transform:uppercase;min-width:48px">${escapeHtml(m)}</th>`),
+    `<th style="font-family:'Google Sans Code', monospace;padding:16px 10px;text-align:center;background:transparent;border-bottom:1px solid var(--border-subtle);font-size:10px;color:var(--accent-positive);text-transform:uppercase;letter-spacing:.15em">12M</th>`
+  ];
+  hmHdr.innerHTML = hmHeaderCells.join("");
 
   const hmBody = document.getElementById("hm-body");
-  hmBody.innerHTML = "";
-  all.forEach((s, i) => {
+  const hmRows = all.map((s, i) => {
     const isBuy = s.rank <= state.topN && s.score !== null;
     const rowBg = isBuy ? "rgba(255, 255, 255, 0.03)" : "transparent";
     const total12m = s.ret12m;
@@ -867,7 +865,7 @@ function render() {
     } else {
       cells = `<td colspan="${allMonthLabels.length}" style="text-align:center;color:#4a5568;font-size:12px;padding:10px">No data</td>`;
     }
-    hmBody.innerHTML += `<tr style="border-bottom:1px solid var(--border-subtle); background:${rowBg}">
+    return `<tr style="border-bottom:1px solid var(--border-subtle); background:${rowBg}">
       <td style="padding:14px 20px;white-space:nowrap;border-bottom:1px solid var(--border-subtle)">
         <div style="display:flex;align-items:center;gap:8px">
           <div>
@@ -880,6 +878,7 @@ function render() {
       <td style="padding:14px 20px;text-align:center;border-bottom:1px solid var(--border-subtle);font-family:'Google Sans Code', monospace;font-size:12px;color:${retTextColor(total12m)}">${total12m !== null ? fmtPct(total12m) : "—"}</td>
     </tr>`;
   });
+  hmBody.innerHTML = hmRows.join("");
 
   // Preserve the currently active view
   setView(state.view);

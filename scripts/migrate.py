@@ -56,6 +56,8 @@ def migrate():
             text   TEXT NOT NULL,
             border TEXT NOT NULL
         );
+        CREATE INDEX idx_tickers_watchlist_sort
+            ON tickers(watchlist_id, sort_order);
     """)
 
     c.execute("INSERT INTO settings VALUES (?, ?)", ("GLOBAL_BASE_CURRENCY", "EUR"))
