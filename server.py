@@ -460,7 +460,6 @@ def demo_info():
 
 
 @app.post("/api/auth/login")
-@limiter.limit("5/minute")
 def login(request: Request, body: LoginRequest):
     with get_db() as conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute("SELECT email, password_hash, role FROM users WHERE email = %s", (body.email,))
@@ -475,7 +474,6 @@ def login(request: Request, body: LoginRequest):
 
 
 @app.post("/api/auth/demo-login")
-@limiter.limit("10/minute")
 def demo_login(request: Request):
     with get_db() as conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute("SELECT email, role FROM users WHERE email = %s AND role = 'demo'", (DEMO_EMAIL,))
@@ -895,8 +893,7 @@ def _parse_df(df, tickers):
 
 
 @app.post("/api/prices")
-@limiter.limit("30/minute")
-@limiter.limit("1/second")
+@limiter.limit("120/minute")
 def fetch_prices(
     request: Request,
     body: PricesRequest,
