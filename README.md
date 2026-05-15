@@ -30,7 +30,7 @@ Important deployment notes:
 - There is no Dockerfile and no Docker Compose file. Deploy the app with Coolify's default Nixpacks build pack.
 - PostgreSQL must be created as a separate Coolify database resource.
 - `DATABASE_URL`, `MARKETDECK_JWT_SECRET`, `MARKETDECK_ADMIN_EMAIL`, and `MARKETDECK_ADMIN_PASSWORD` are required before the app can start.
-- The app intentionally uses PostgreSQL only. The previous SQLite setup is not used by this deployment path.
+- The app intentionally uses PostgreSQL only.
 
 ## Project Structure
 
@@ -40,19 +40,12 @@ Important deployment notes:
 |-- seed_data.py
 |-- requirements.txt
 |-- index.html
-|-- static/
-|   |-- app.js
-|   `-- styles.css
-|-- data/
-|   |-- colors.json
-|   |-- lists.json
-|   `-- volumes.json
-`-- scripts/
-    |-- get_volumes.py
-    `-- migrate.py
+`-- static/
+    |-- app.js
+    `-- styles.css
 ```
 
-`data/lists.json` and `data/colors.json` are retained as legacy source data, but production seeding uses `seed_data.py`.
+Seed data is maintained directly in `seed_data.py`.
 
 ## Environment Variables
 
@@ -254,10 +247,6 @@ Yahoo Finance responses are cached in memory for 5 minutes per ticker. The cache
 ```text
 DELETE /api/prices/cache
 ```
-
-### SQLite
-
-SQLite is no longer part of the deployment architecture. The old migration script and JSON files remain in the repository for historical/reference purposes, but the deployed app uses PostgreSQL and `seed_data.py`.
 
 ## Troubleshooting
 

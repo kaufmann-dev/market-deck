@@ -1,8 +1,7 @@
 """First-deploy seed data for MarketDeck.
 
-This module intentionally contains structured Python data instead of reading the
-legacy JSON files at runtime. The server imports these constants during startup
-when it initializes an empty PostgreSQL database.
+The server imports these constants during startup when it initializes an empty
+PostgreSQL database.
 """
 
 SEED_SETTINGS = {
