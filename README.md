@@ -125,11 +125,9 @@ Demo users can browse data and fetch prices, but write endpoints return `403`.
 
 ### Rate Limiting
 
-Rate limiting is in memory and suitable for a single-process MVP deployment:
+Rate limiting is in memory and only protects the Yahoo Finance proxy endpoint:
 
-- `POST /api/auth/login`: `5/minute`
-- `POST /api/auth/demo-login`: `10/minute`
-- `POST /api/prices`: `30/minute` and `1/second`
+- `POST /api/prices`: `120/minute`
 
 If you scale horizontally, move rate-limit storage to a shared backend such as Redis.
 
