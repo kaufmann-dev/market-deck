@@ -72,6 +72,7 @@ Optional:
 ```env
 MARKETDECK_DB_CONNECT_RETRIES=30
 MARKETDECK_DB_CONNECT_RETRY_DELAY=2
+MARKETDECK_PRICE_CACHE_TTL_SECONDS=3600
 PORT=8000
 ```
 
@@ -133,7 +134,15 @@ If you scale horizontally, move rate-limit storage to a shared backend such as R
 
 ### Price Cache
 
-Yahoo Finance responses are cached in memory for 5 minutes per ticker. The cache is cleared on app restart. Admins can also clear it through:
+Yahoo Finance responses are cached in PostgreSQL per account and ticker. This means the demo account shares cached prices across devices, while admin and demo sessions do not share price-cache entries with each other.
+
+The default cache TTL is 1 hour. Override it with:
+
+```env
+MARKETDECK_PRICE_CACHE_TTL_SECONDS=3600
+```
+
+Admins can clear the server-side cache through:
 
 ```text
 DELETE /api/prices/cache
