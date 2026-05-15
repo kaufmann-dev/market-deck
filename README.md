@@ -49,22 +49,19 @@ Seed data is maintained directly in `seed_data.py`.
 
 ## Environment Variables
 
-Required:
+Configure these in the Coolify application resource under **Environment Variables**.
 
-```env
-DATABASE_URL=postgresql://USER:PASSWORD@HOST:5432/DATABASE
-MARKETDECK_JWT_SECRET=replace-with-a-long-random-secret
-MARKETDECK_ADMIN_EMAIL=admin@example.com
-MARKETDECK_ADMIN_PASSWORD=replace-with-a-strong-password
-```
+| Variable | Required | Example | Available at Buildtime | Available at Runtime | Is Literal? | Is Multiline? |
+| --- | --- | --- | --- | --- | --- | --- |
+| `DATABASE_URL` | Yes | `postgresql://USER:PASSWORD@HOST:5432/DATABASE` | No | Yes | Yes | No |
+| `MARKETDECK_JWT_SECRET` | Yes | `replace-with-a-long-random-secret` | No | Yes | Yes | No |
+| `MARKETDECK_ADMIN_EMAIL` | Yes | `admin@example.com` | No | Yes | Yes | No |
+| `MARKETDECK_ADMIN_PASSWORD` | Yes | `replace-with-a-strong-password` | No | Yes | Yes | No |
+| `MARKETDECK_DEMO_EMAIL` | No | `demo@marketdeck.app` | No | Yes | Yes | No |
+| `MARKETDECK_DEMO_PASSWORD` | No | `marketdeck` | No | Yes | Yes | No |
+| `PORT` | Usually no | `8000` | No | Yes | Yes | No |
 
-Optional:
-
-```env
-MARKETDECK_DEMO_EMAIL=demo@marketdeck.app
-MARKETDECK_DEMO_PASSWORD=marketdeck
-PORT=8000
-```
+`PORT` is usually provided by Coolify from the exposed port. Add it only if your app resource does not set it automatically.
 
 Generate a strong JWT secret locally:
 
@@ -136,18 +133,18 @@ Coolify sets `PORT` from the first exposed port if it is not explicitly configur
 
 In the application resource, open **Environment Variables** and add:
 
-```env
-DATABASE_URL=<the PostgreSQL internal URL from Coolify>
-MARKETDECK_JWT_SECRET=<output from openssl rand -hex 32>
-MARKETDECK_ADMIN_EMAIL=<your admin email>
-MARKETDECK_ADMIN_PASSWORD=<your first admin password>
-MARKETDECK_DEMO_EMAIL=demo@marketdeck.app
-MARKETDECK_DEMO_PASSWORD=marketdeck
-```
+| Variable | Value | Available at Buildtime | Available at Runtime | Is Literal? | Is Multiline? |
+| --- | --- | --- | --- | --- | --- |
+| `DATABASE_URL` | PostgreSQL internal URL from Coolify | No | Yes | Yes | No |
+| `MARKETDECK_JWT_SECRET` | Output from `openssl rand -hex 32` | No | Yes | Yes | No |
+| `MARKETDECK_ADMIN_EMAIL` | Your admin email | No | Yes | Yes | No |
+| `MARKETDECK_ADMIN_PASSWORD` | Your first admin password | No | Yes | Yes | No |
+| `MARKETDECK_DEMO_EMAIL` | `demo@marketdeck.app` or your preferred public demo email | No | Yes | Yes | No |
+| `MARKETDECK_DEMO_PASSWORD` | `marketdeck` or your preferred public demo password | No | Yes | Yes | No |
+| `PORT` | `8000`, only if Coolify does not set it automatically | No | Yes | Yes | No |
 
 Recommended:
 
-- Mark secrets as runtime variables.
 - Keep `MARKETDECK_JWT_SECRET`, `MARKETDECK_ADMIN_PASSWORD`, and the database password private.
 - Change the admin password from the in-app admin menu after first login if you do not want the env var password to remain your long-term password.
 
