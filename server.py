@@ -29,8 +29,8 @@ from seed_data import SEED_SETTINGS, SEED_TAG_COLORS, SEED_TICKERS, SEED_WATCHLI
 APP_DIR = Path(__file__).resolve().parent
 JWT_ALGORITHM = "HS256"
 JWT_TTL_SECONDS = 86400
-DEMO_EMAIL = "demo@marketdeck.app"
-DEMO_PASSWORD_HASH = "demo-login-only"
+DEMO_USER_ID = "__marketdeck_demo_user__"
+DEMO_AUTH_DISABLED = "disabled"
 REQUIRED_ENV = [
     "DATABASE_URL",
     "MARKETDECK_JWT_SECRET",
@@ -160,10 +160,10 @@ def verify_password(password: str, password_hash: str) -> bool:
     return pwd_context.verify(password, password_hash)
 
 
-def create_access_token(email: str, role: str) -> str:
+def create_access_token(subject: str, role: str) -> str:
     now = datetime.now(timezone.utc)
     payload = {
-        "sub": email,
+        "sub": subject,
         "role": role,
         "iat": int(now.timestamp()),
         "exp": int((now + timedelta(seconds=JWT_TTL_SECONDS)).timestamp()),
@@ -187,13 +187,18 @@ def get_current_user(request: Request) -> CurrentUser:
     except JWTError:
         raise HTTPException(401, "Token expired")
 
-    email = payload.get("sub")
+    subject = payload.get("sub")
     role = payload.get("role")
-    if not email or role not in ("admin", "demo"):
+    if not subject or role not in ("admin", "demo"):
         raise HTTPException(401, "Token expired")
+
     with get_db() as conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
-        cur.execute("SELECT email, role FROM users WHERE email = %s", (email,))
+        if role == "demo":
+            cur.execute("SELECT email, role FROM users WHERE role = 'demo' ORDER BY id LIMIT 1")
+        else:
+            cur.execute("SELECT email, role FROM users WHERE email = %s", (subject,))
         user = dict_row(cur)
+
     if not user or user["role"] != role:
         raise HTTPException(401, "Token expired")
     return CurrentUser(email=user["email"], role=user["role"])
@@ -369,7 +374,7 @@ def seed_users(conn):
             VALUES (%s, %s, 'demo')
             ON CONFLICT (email) DO NOTHING
             """,
-            (DEMO_EMAIL, DEMO_PASSWORD_HASH),
+            (DEMO_USER_ID, DEMO_AUTH_DISABLED),
         )
         cur.execute(
             """
@@ -480,7 +485,11 @@ def login(request: Request, body: LoginRequest):
         cur.execute("SELECT email, password_hash, role FROM users WHERE email = %s", (body.email,))
         user = dict_row(cur)
 
-    if not user or user["role"] == "demo" or not verify_password(body.password, user["password_hash"]):
+    if not user or user["role"] == "demo":
+        print(f"failed login: email={body.email} ip={get_remote_address(request)}")
+        raise HTTPException(401, "Invalid email or password")
+
+    if not verify_password(body.password, user["password_hash"]):
         print(f"failed login: email={body.email} ip={get_remote_address(request)}")
         raise HTTPException(401, "Invalid email or password")
 
@@ -491,19 +500,21 @@ def login(request: Request, body: LoginRequest):
 @app.post("/api/auth/demo-login")
 def demo_login(request: Request):
     with get_db() as conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
-        cur.execute("SELECT email, role FROM users WHERE email = %s AND role = 'demo'", (DEMO_EMAIL,))
+        cur.execute("SELECT role FROM users WHERE role = 'demo' ORDER BY id LIMIT 1")
         user = dict_row(cur)
 
     if not user:
         print(f"failed demo login: demo user missing ip={get_remote_address(request)}")
         raise HTTPException(503, "Demo login is temporarily unavailable")
 
-    token = create_access_token(user["email"], user["role"])
-    return {"token": token, "email": user["email"], "role": user["role"]}
+    token = create_access_token("demo", user["role"])
+    return {"token": token, "role": user["role"]}
 
 
 @app.get("/api/auth/me")
 def me(current_user: CurrentUser = Depends(get_current_user)):
+    if current_user.role == "demo":
+        return {"role": current_user.role}
     return {"email": current_user.email, "role": current_user.role}
 
 
@@ -789,6 +800,8 @@ def _is_cacheable_series(data):
 
 
 def _account_cache_key(current_user: CurrentUser) -> str:
+    if current_user.role == "demo":
+        return "demo"
     return current_user.email.strip().lower()
 
 

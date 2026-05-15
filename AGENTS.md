@@ -30,7 +30,7 @@ Missing any causes immediate `SystemExit(1)`.
 - Schema is auto-created on startup (`CREATE TABLE IF NOT EXISTS`). No migration tool.
 - `seed_data.py` is imported by `server.py` and seeded **only when `watchlists` is empty**.
   - Changing `seed_data.py` will **not** affect an existing database. To re-seed, truncate the `watchlists` table (or drop the DB).
-- Admin/demo users are inserted with `ON CONFLICT DO NOTHING`, so redeploys do not reset passwords.
+- Admin users are inserted with `ON CONFLICT DO NOTHING`, so redeploys do not reset the admin password. Demo user seeding is also idempotent.
 - The server retries PostgreSQL connection on startup (30 attempts by default) to tolerate slow DB spin-up.
 
 ## Frontend
@@ -38,7 +38,8 @@ Missing any causes immediate `SystemExit(1)`.
 - `index.html` references `static/styles.css?v=2` and `static/app.js?v=2`. Bump the `v=` query param when deploying static asset changes to avoid stale browser caches.
 
 ## API / backend quirks
-- In-memory rate limiting (`slowapi`) and in-memory price cache (5 min TTL). Both reset on process restart.
+- In-memory rate limiting (`slowapi`) protects `/api/prices`.
+- Price data is cached in PostgreSQL per account and ticker.
 - Price fetching relies on `yfinance`. Calls can be slow or fail; the backend retries per-ticker on failure.
 
 ## Deployment

@@ -145,13 +145,18 @@ function showDashboardShell() {
   document.body.classList.add("auth-ready");
   document.getElementById("login-view").style.display = "none";
   document.getElementById("session-bar").style.display = "flex";
-  document.getElementById("session-label").textContent = `${state.currentUser.email} · ${state.currentUser.role}`;
+  document.getElementById("session-label").textContent = sessionLabel();
   document.getElementById("change-password-btn").style.display = isAdmin() ? "" : "none";
+}
+
+function sessionLabel() {
+  if (isDemo()) return "Demo";
+  return state.currentUser?.email || "Admin";
 }
 
 async function applyLogin(data) {
   setToken(data.token);
-  state.currentUser = { email: data.email, role: data.role };
+  state.currentUser = { email: data.email || "", role: data.role };
   showDashboardShell();
   await refreshApp();
 }
