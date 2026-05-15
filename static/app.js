@@ -1,6 +1,6 @@
 let LISTS = {};
 let TAG_COLORS = {};
-
+const AUTH_TOKEN_KEY = "marketdeck_token";
 
 // ═══════════════════════════════════════════
 //  STATE
@@ -20,9 +20,27 @@ let state = {
   dataEpoch: 0,
   currentView: "home",   // "home" or "list"
   typeFilter: "All",
+  currentUser: null,
+  demoCredentials: { email: "demo@marketdeck.app", password: "marketdeck" },
 };
 
 let GLOBAL_BASE_CURRENCY = "USD";
+
+function getToken() {
+  return localStorage.getItem(AUTH_TOKEN_KEY);
+}
+
+function setToken(token) {
+  localStorage.setItem(AUTH_TOKEN_KEY, token);
+}
+
+function isAdmin() {
+  return state.currentUser?.role === "admin";
+}
+
+function isDemo() {
+  return state.currentUser?.role === "demo";
+}
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -60,9 +78,22 @@ async function getErrorMessage(response) {
 }
 
 async function apiFetch(url, options = {}) {
-  const response = await fetch(url, options);
+  const { auth = true, ...fetchOptions } = options;
+  const headers = new Headers(fetchOptions.headers || {});
+  const token = getToken();
+  if (auth && token) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
+  const response = await fetch(url, { ...fetchOptions, headers });
   if (!response.ok) {
-    throw new Error(await getErrorMessage(response));
+    const message = await getErrorMessage(response);
+    if (auth && response.status === 401) {
+      clearSession();
+      showLogin();
+    }
+    const error = new Error(message);
+    error.status = response.status;
+    throw error;
   }
   return response;
 }
@@ -86,6 +117,89 @@ function resetDataCaches(options = {}) {
   state.cache = {};
   if (!preserveTickerCache) state.tickerCache = {};
   if (!preserveFxCache) state.fxCache = {};
+}
+
+function clearSession() {
+  localStorage.removeItem(AUTH_TOKEN_KEY);
+  abortPendingLoads();
+  state.currentUser = null;
+  state.activeList = null;
+  state.currentView = "home";
+  state.typeFilter = "All";
+  resetDataCaches();
+}
+
+function showLogin() {
+  document.body.classList.remove("auth-ready");
+  document.body.classList.add("auth-pending");
+  document.getElementById("login-view").style.display = "flex";
+  document.getElementById("session-bar").style.display = "none";
+  document.getElementById("view-home").style.display = "none";
+  document.getElementById("view-list").style.display = "none";
+  closeEditor();
+  closeListEditModal();
+  closePasswordModal();
+}
+
+function showDashboardShell() {
+  document.body.classList.remove("auth-pending");
+  document.body.classList.add("auth-ready");
+  document.getElementById("login-view").style.display = "none";
+  document.getElementById("session-bar").style.display = "flex";
+  document.getElementById("session-label").textContent = `${state.currentUser.email} · ${state.currentUser.role}`;
+  document.getElementById("change-password-btn").style.display = isAdmin() ? "" : "none";
+}
+
+async function loadDemoInfo() {
+  const data = await apiFetchJson("/api/auth/demo-info", { auth: false });
+  state.demoCredentials = data;
+  document.getElementById("demo-email").textContent = data.email;
+  document.getElementById("demo-password").textContent = data.password;
+  if (!document.getElementById("login-email").value) {
+    document.getElementById("login-email").value = data.email;
+  }
+}
+
+async function loginWithCredentials(email, password) {
+  const data = await apiFetchJson("/api/auth/login", {
+    auth: false,
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password })
+  });
+  setToken(data.token);
+  state.currentUser = { email: data.email, role: data.role };
+  showDashboardShell();
+  await refreshApp();
+}
+
+async function handleLoginSubmit(event) {
+  event.preventDefault();
+  const errorEl = document.getElementById("login-error");
+  errorEl.textContent = "";
+  try {
+    await loginWithCredentials(
+      document.getElementById("login-email").value.trim(),
+      document.getElementById("login-password").value
+    );
+  } catch (e) {
+    errorEl.textContent = e.message;
+  }
+}
+
+async function loginAsDemo() {
+  const errorEl = document.getElementById("login-error");
+  errorEl.textContent = "";
+  try {
+    await loginWithCredentials(state.demoCredentials.email, state.demoCredentials.password);
+  } catch (e) {
+    errorEl.textContent = e.message;
+  }
+}
+
+function logout() {
+  clearSession();
+  showLogin();
 }
 
 function normalizeCategoryValue(category) {
@@ -182,6 +296,7 @@ function switchList(id) {
   const list = LISTS[id];
   document.getElementById("page-title").textContent = list.name;
   document.getElementById("page-subtitle").textContent = list.description;
+  document.getElementById("edit-btn").style.display = isAdmin() ? "" : "none";
 
   // reset view
   state.view = "r";
@@ -198,13 +313,14 @@ function switchList(id) {
 // ═══════════════════════════════════════════
 function renderHomepage() {
   document.getElementById("home-currency-input").value = GLOBAL_BASE_CURRENCY;
+  document.querySelector(".tag-section").style.display = isAdmin() ? "" : "none";
 
   // Render watchlist cards
   const grid = document.getElementById("home-grid");
   let html = "";
   for (const [id, list] of Object.entries(LISTS)) {
     html += `<div class="wl-card" onclick="switchList('${escapeJsString(id)}')">
-      <button class="wl-card-edit" onclick="event.stopPropagation();openListEditModal('${escapeJsString(id)}')" title="Edit list">✎</button>
+      ${isAdmin() ? `<button class="wl-card-edit" onclick="event.stopPropagation();openListEditModal('${escapeJsString(id)}')" title="Edit list">✎</button>` : ""}
       <div class="wl-card-name">${escapeHtml(list.name)}</div>
       <div class="wl-card-meta">
         <span class="wl-card-count">${list.items.length} tickers</span>
@@ -213,10 +329,12 @@ function renderHomepage() {
       ${list.description ? `<div class="wl-card-desc">${escapeHtml(list.description)}</div>` : ""}
     </div>`;
   }
-  html += `<div class="wl-card-new" onclick="openCreateListModal()">
-    <div class="wl-card-new-icon">+</div>
-    <div class="wl-card-new-label">Create New List</div>
-  </div>`;
+  if (isAdmin()) {
+    html += `<div class="wl-card-new" onclick="openCreateListModal()">
+      <div class="wl-card-new-icon">+</div>
+      <div class="wl-card-new-label">Create New List</div>
+    </div>`;
+  }
   grid.innerHTML = html;
 
   // Render tag colors editor
@@ -252,6 +370,10 @@ function hexFromTagColors(tc) {
 
 function renderTagColorsEditor() {
   const container = document.getElementById("tag-colors-editor");
+  if (!isAdmin()) {
+    container.innerHTML = "";
+    return;
+  }
   let html = `<div class="tag-color-grid">`;
   for (const [tag, colors] of Object.entries(TAG_COLORS)) {
     const hex = hexFromTagColors(colors);
@@ -269,6 +391,7 @@ function renderTagColorsEditor() {
 }
 
 async function updateTagColor(tag, hex) {
+  if (!isAdmin()) return;
   const normalizedTag = normalizeTagValue(tag);
   const colors = autoGenerateTagColors(hex);
   try {
@@ -283,6 +406,7 @@ async function updateTagColor(tag, hex) {
 }
 
 async function deleteTagColor(tag) {
+  if (!isAdmin()) return;
   const normalizedTag = normalizeTagValue(tag);
   if (!confirm(`Remove color for "${normalizedTag}"?`)) return;
   try {
@@ -293,6 +417,7 @@ async function deleteTagColor(tag) {
 }
 
 async function addTagColor() {
+  if (!isAdmin()) return;
   const name = normalizeTagValue(document.getElementById("tag-new-name").value);
   const hex = document.getElementById("tag-new-color").value;
   if (!name) return alert("Tag name is required.");
@@ -315,6 +440,7 @@ async function addTagColor() {
 let _editingListSlug = null;
 
 function openListEditModal(slug) {
+  if (!isAdmin()) return;
   _editingListSlug = slug;
   const list = LISTS[slug];
   document.getElementById("list-edit-title").textContent = `Edit: ${list.name}`;
@@ -333,6 +459,7 @@ function closeListEditModal() {
 }
 
 function openCreateListModal() {
+  if (!isAdmin()) return;
   _editingListSlug = "__new__";
   document.getElementById("list-edit-title").textContent = "Create New List";
   document.getElementById("le-name").value = "";
@@ -346,6 +473,7 @@ function openCreateListModal() {
 }
 
 async function saveListFromModal() {
+  if (!isAdmin()) return;
   const name = document.getElementById("le-name").value.trim();
   const short_name = document.getElementById("le-short").value.trim();
   const category = normalizeCategoryValue(document.getElementById("le-category").value);
@@ -382,6 +510,7 @@ async function saveListFromModal() {
 }
 
 async function deleteListFromModal() {
+  if (!isAdmin()) return;
   if (!_editingListSlug || _editingListSlug === "__new__") return;
   if (!confirm(`Delete the entire "${LISTS[_editingListSlug].name}" list?`)) return;
   try {
@@ -888,6 +1017,7 @@ function render() {
 //  TICKER EDITOR (simplified — tickers only)
 // ═══════════════════════════════════════════
 function openEditor() {
+  if (!isAdmin()) return;
   if (!state.activeList) return;
   const slug = state.activeList;
   const list = LISTS[slug];
@@ -898,7 +1028,7 @@ function openEditor() {
 
 function closeEditor() {
   document.getElementById("editor-overlay").style.display = "none";
-  if (state.activeList) {
+  if (state.activeList && isAdmin()) {
     loadData(state.activeList);
   }
 }
@@ -930,6 +1060,14 @@ function renderEditorTickers() {
 // ═══════════════════════════════════════════
 async function saveBaseCurrency() {
   const val = document.getElementById("home-currency-input").value;
+  if (isDemo()) {
+    GLOBAL_BASE_CURRENCY = val;
+    resetDataCaches({ preserveTickerCache: true });
+    if (state.currentView === "list" && state.activeList) {
+      loadData(state.activeList);
+    }
+    return;
+  }
   try {
     await apiFetch("/api/settings/GLOBAL_BASE_CURRENCY", {
       method: "PUT",
@@ -988,6 +1126,7 @@ async function refreshApp() {
 }
 
 async function saveTicker(id, btn) {
+  if (!isAdmin()) return;
   const row = btn.closest(".ed-ticker-row");
   const body = {};
   row.querySelectorAll("input[data-id]").forEach(inp => {
@@ -1017,6 +1156,7 @@ async function saveTicker(id, btn) {
 }
 
 async function deleteTicker(id) {
+  if (!isAdmin()) return;
   if (!confirm("Remove this ticker?")) return;
   try {
     await apiFetch(`/api/tickers/${id}`, { method: "DELETE" });
@@ -1029,6 +1169,7 @@ async function deleteTicker(id) {
 }
 
 async function addTicker() {
+  if (!isAdmin()) return;
   const slug = state.activeList;
   const symbol = document.getElementById("ed-add-symbol").value.trim();
   const name = document.getElementById("ed-add-name").value.trim();
@@ -1052,23 +1193,58 @@ async function addTicker() {
   } catch (e) { alert("Error adding ticker: " + e.message); }
 }
 
+function openPasswordModal() {
+  if (!isAdmin()) return;
+  document.getElementById("pw-current").value = "";
+  document.getElementById("pw-new").value = "";
+  document.getElementById("password-error").textContent = "";
+  document.getElementById("password-modal").style.display = "block";
+}
+
+function closePasswordModal() {
+  const modal = document.getElementById("password-modal");
+  if (modal) modal.style.display = "none";
+}
+
+async function savePassword(event) {
+  event.preventDefault();
+  if (!isAdmin()) return;
+  const errorEl = document.getElementById("password-error");
+  errorEl.textContent = "";
+  try {
+    await apiFetch("/api/auth/password", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        current_password: document.getElementById("pw-current").value,
+        new_password: document.getElementById("pw-new").value
+      })
+    });
+    closePasswordModal();
+    alert("Password changed.");
+  } catch (e) {
+    errorEl.textContent = e.message;
+  }
+}
+
 // ═══════════════════════════════════════════
 //  INIT
 // ═══════════════════════════════════════════
 async function initApp() {
   try {
-    const data = await apiFetchJson('/api/init');
-
-    LISTS = data.lists;
-    TAG_COLORS = normalizeTagColors(data.tagColors);
-    GLOBAL_BASE_CURRENCY = data.settings.GLOBAL_BASE_CURRENCY || "USD";
-
-    buildSidebar();
-    showHome();
+    await loadDemoInfo();
+    const token = getToken();
+    if (!token) {
+      showLogin();
+      return;
+    }
+    const user = await apiFetchJson("/api/auth/me");
+    state.currentUser = user;
+    showDashboardShell();
+    await refreshApp();
   } catch (e) {
-    document.getElementById("view-home").style.display = "block";
-    document.getElementById("home-grid").innerHTML = `<div style="color:#fc8181;padding:20px;">Error loading data from server</div>`;
     console.error(e);
+    showLogin();
   }
 }
 
