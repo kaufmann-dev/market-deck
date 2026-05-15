@@ -243,7 +243,7 @@ function closeMobileNav() {
 // ═══════════════════════════════════════════
 function buildSidebar() {
   const nav = document.getElementById("sidebar");
-  let html = `<button class="sidebar-home-btn${state.currentView === 'home' ? ' active' : ''}" onclick="showHome()">MarketDeck</button>`;
+  let html = `<button class="sidebar-home-btn${state.currentView === 'home' ? ' active' : ''}" onclick="showHome()">Market Deck</button>`;
 
   const grouped = {};
   for (const [id, list] of Object.entries(LISTS)) {
