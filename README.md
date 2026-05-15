@@ -1,4 +1,4 @@
-# MarketDeck
+# Market Deck
 
 FastAPI + vanilla JavaScript financial dashboard with PostgreSQL persistence, JWT auth, admin/demo roles, and Yahoo Finance price loading.
 

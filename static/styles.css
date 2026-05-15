@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════
-   MarketDeck — Premium Dark Theme
+   Market Deck — Premium Dark Theme
    ═══════════════════════════════════════════ */
 
 *,
@@ -195,6 +195,39 @@ body {
 
 .demo-login button {
   width: 100%;
+}
+
+.legal-links {
+  position: fixed;
+  right: 24px;
+  bottom: 18px;
+  z-index: 900;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 8px 10px;
+  background: rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(10px);
+}
+
+.legal-links a {
+  color: var(--text-tertiary);
+  font-size: 10px;
+  line-height: 1;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  text-decoration: none;
+  transition: var(--transition-fast);
+}
+
+.legal-links a:hover,
+.legal-links a:focus-visible {
+  color: var(--text-primary);
+}
+
+.legal-links a:focus-visible {
+  outline: 1px solid var(--text-primary);
+  outline-offset: 4px;
 }
 
 .session-bar {
@@ -1749,7 +1782,14 @@ tr:hover td {
   }
 
   .main {
-    padding: 60px 16px 16px;
+    padding: 60px 16px 56px;
+  }
+
+  .legal-links {
+    right: 50%;
+    bottom: 12px;
+    transform: translateX(50%);
+    gap: 16px;
   }
 
   .home-grid {

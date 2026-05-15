@@ -1,4 +1,4 @@
-# AGENTS.md — MarketDeck
+# AGENTS.md — Market Deck
 
 Compact notes for AI agents working in this repo.
 
