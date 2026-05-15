@@ -1,5 +1,5 @@
 """
-FastAPI backend serving MarketDeck static files and REST APIs.
+FastAPI backend serving Market Deck static files and REST APIs.
 """
 import os
 import sys
@@ -459,7 +459,7 @@ def seed_initial_data(conn):
                 (_normalize_tag(tag), colors["bg"], colors["text"], colors["border"]),
             )
     conn.commit()
-    print("seed complete: initial MarketDeck data inserted")
+    print("seed complete: initial Market Deck data inserted")
 
 
 @app.on_event("startup")
