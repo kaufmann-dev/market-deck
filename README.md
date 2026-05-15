@@ -70,8 +70,6 @@ MARKETDECK_ADMIN_PASSWORD=replace-with-a-strong-password
 Optional:
 
 ```env
-MARKETDECK_DEMO_EMAIL=demo@marketdeck.app
-MARKETDECK_DEMO_PASSWORD=marketdeck
 MARKETDECK_DB_CONNECT_RETRIES=30
 MARKETDECK_DB_CONNECT_RETRY_DELAY=2
 PORT=8000
@@ -113,7 +111,7 @@ Changing `MARKETDECK_ADMIN_PASSWORD` later does not overwrite an existing databa
 
 Dashboard seed data is first-deploy only. If the `watchlists` table already has rows, the app skips watchlist/ticker/tag/settings seeding.
 
-Admin and demo users are inserted with `ON CONFLICT DO NOTHING`, so redeploys do not reset passwords.
+Admin and demo users are inserted with `ON CONFLICT DO NOTHING`, so redeploys do not reset the admin password.
 
 ### Startup Retries
 
@@ -121,13 +119,16 @@ The server retries the PostgreSQL connection during startup. This helps when Coo
 
 ### Demo Account
 
-The demo account is a real database user with role `demo`. Demo users can browse data and fetch prices, but write endpoints return `403`.
+The demo account is a real database user with role `demo`, but it does not use public email/password credentials. The **Login as Demo** button calls `POST /api/auth/demo-login` and receives a read-only demo session.
+
+Demo users can browse data and fetch prices, but write endpoints return `403`.
 
 ### Rate Limiting
 
 Rate limiting is in memory and suitable for a single-process MVP deployment:
 
 - `POST /api/auth/login`: `5/minute`
+- `POST /api/auth/demo-login`: `10/minute`
 - `POST /api/prices`: `30/minute` and `1/second`
 
 If you scale horizontally, move rate-limit storage to a shared backend such as Redis.
@@ -178,16 +179,6 @@ This endpoint also checks database connectivity. If it fails, inspect app logs f
 
 Check that the credentials match the database user. If the admin user already existed, changing `MARKETDECK_ADMIN_PASSWORD` in Coolify will not reset it.
 
-### Demo Credentials Look Wrong
-
-The login screen reads demo credentials from:
-
-```text
-GET /api/auth/demo-info
-```
-
-If you set `MARKETDECK_DEMO_EMAIL` or `MARKETDECK_DEMO_PASSWORD`, those values are displayed publicly by design.
-
 ## Local Development
 
 Local development requires PostgreSQL.
@@ -217,6 +208,7 @@ Public:
 
 - `GET /api/auth/demo-info`
 - `POST /api/auth/login`
+- `POST /api/auth/demo-login`
 
 Authenticated admin or demo:
 
