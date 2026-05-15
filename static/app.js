@@ -1113,7 +1113,7 @@ async function refreshApp() {
     buildSidebar();
 
     if (state.currentView === "home") {
-      renderHomepage();
+      showHome();
     } else if (state.activeList && LISTS[state.activeList]) {
       // Re-trigger loadData for the active list to sync the UI
       loadData(state.activeList);
