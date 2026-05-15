@@ -616,7 +616,7 @@ async function loadData(listId) {
   const sb = document.getElementById("status-bar");
   sb.querySelector(".spinner").style.display = "block";
   sb.className = "s-load";
-  document.getElementById("status-text").textContent = `Fetching live data for ${list.shortName}…`;
+  document.getElementById("status-text").textContent = `Loading price data for ${list.shortName}…`;
   document.getElementById("app").style.display = "none";
 
   const existingListCache = { ...(state.cache[listId] || {}) };
@@ -649,7 +649,7 @@ async function loadData(listId) {
       const listCache = { ...existingListCache };
 
       if (state.activeList === listId) {
-        document.getElementById("status-text").textContent = `Fetching ${retryStockTickers.length} tickers + ${retryFxTickers.length} FX rates…`;
+        document.getElementById("status-text").textContent = `Loading ${retryStockTickers.length} tickers + ${retryFxTickers.length} FX rates…`;
       }
 
       if (allTickers.length === 0) {
