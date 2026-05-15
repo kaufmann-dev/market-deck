@@ -21,7 +21,6 @@ let state = {
   currentView: "home",   // "home" or "list"
   typeFilter: "All",
   currentUser: null,
-  demoCredentials: { email: "demo@marketdeck.app", password: "marketdeck" },
 };
 
 let GLOBAL_BASE_CURRENCY = "USD";
@@ -150,27 +149,20 @@ function showDashboardShell() {
   document.getElementById("change-password-btn").style.display = isAdmin() ? "" : "none";
 }
 
-async function loadDemoInfo() {
-  const data = await apiFetchJson("/api/auth/demo-info", { auth: false });
-  state.demoCredentials = data;
-  document.getElementById("demo-email").textContent = data.email;
-  document.getElementById("demo-password").textContent = data.password;
-  if (!document.getElementById("login-email").value) {
-    document.getElementById("login-email").value = data.email;
-  }
-}
-
-async function loginWithCredentials(email, password) {
-  const data = await apiFetchJson("/api/auth/login", {
-    auth: false,
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, password })
-  });
+async function applyLogin(data) {
   setToken(data.token);
   state.currentUser = { email: data.email, role: data.role };
   showDashboardShell();
   await refreshApp();
+}
+
+async function loginWithCredentials(email, password) {
+  await applyLogin(await apiFetchJson("/api/auth/login", {
+    auth: false,
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password })
+  }));
 }
 
 async function handleLoginSubmit(event) {
@@ -191,7 +183,10 @@ async function loginAsDemo() {
   const errorEl = document.getElementById("login-error");
   errorEl.textContent = "";
   try {
-    await loginWithCredentials(state.demoCredentials.email, state.demoCredentials.password);
+    await applyLogin(await apiFetchJson("/api/auth/demo-login", {
+      auth: false,
+      method: "POST"
+    }));
   } catch (e) {
     errorEl.textContent = e.message;
   }
@@ -1232,7 +1227,6 @@ async function savePassword(event) {
 // ═══════════════════════════════════════════
 async function initApp() {
   try {
-    await loadDemoInfo();
     const token = getToken();
     if (!token) {
       showLogin();
