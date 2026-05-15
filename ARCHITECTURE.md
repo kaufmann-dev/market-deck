@@ -1,6 +1,6 @@
 # Architecture Summary
 
-**Concept:** Rebuild MarketDeck with JWT-based authentication (admin + demo roles), rate-limited price fetching, and Coolify deployment, while preserving the existing vanilla HTML/JS frontend and migrating from SQLite to PostgreSQL.
+**Concept:** Rebuild MarketDeck with JWT-based authentication (admin + demo roles), rate-limited price fetching, and Coolify deployment, using PostgreSQL as a fresh database with auto-seeding on first startup.
 
 **Stack:**
 
@@ -9,7 +9,7 @@
 | Python 3.11+ with FastAPI + Uvicorn | Existing backend. No reason to change. Mature, stable. |
 | python-jose + passlib[bcrypt] | JWT creation/verification and password hashing. Minimal, standard libraries for FastAPI. |
 | slowapi | Rate limiting middleware built for FastAPI. Uses `limits` under the hood. Off-the-shelf, removes build work. |
-| PostgreSQL + psycopg2-binary | Requested over SQLite. Handles concurrent reads/writes better. psycopg2 is the standard synchronous PostgreSQL driver for Python. Connected via `DATABASE_URL` environment variable. |
+| PostgreSQL + psycopg2-binary | Fresh setup — no migration from SQLite. Runs as a separate Coolify service. Connected via internal `DATABASE_URL`. psycopg2 is the standard synchronous PostgreSQL driver for Python. |
 | Vanilla HTML/CSS/JS (existing) | No frontend framework needed. Single HTML file with view toggles (login / home / list). Consistent with existing conventions. |
 | Coolify GitHub clone deploy | No Dockerfile. Coolify auto-detects Python from `requirements.txt` and runs `uvicorn server:app`. |
 
@@ -214,9 +214,10 @@ All interactions are synchronous HTTP request/response. There are no async hando
 
 ### Schema Notes
 
-**New migration — auto-applied on startup:**
+**Full schema — created on startup:**
 
 ```sql
+-- Users (new)
 CREATE TABLE IF NOT EXISTS users (
     id SERIAL PRIMARY KEY,
     email TEXT UNIQUE NOT NULL,
@@ -224,33 +225,55 @@ CREATE TABLE IF NOT EXISTS users (
     role TEXT NOT NULL CHECK(role IN ('admin', 'demo')),
     created_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
+
+-- Settings (key-value store)
+CREATE TABLE IF NOT EXISTS settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
+
+-- Watchlists
+CREATE TABLE IF NOT EXISTS watchlists (
+    id SERIAL PRIMARY KEY,
+    slug TEXT UNIQUE NOT NULL,
+    name TEXT NOT NULL,
+    short_name TEXT NOT NULL,
+    category TEXT NOT NULL DEFAULT 'Other',
+    description TEXT NOT NULL DEFAULT '',
+    tag TEXT NOT NULL DEFAULT '',
+    currency TEXT NOT NULL DEFAULT 'USD',
+    show_type BOOLEAN NOT NULL DEFAULT TRUE
+);
+
+-- Tickers (belongs to a watchlist, cascade delete)
+CREATE TABLE IF NOT EXISTS tickers (
+    id SERIAL PRIMARY KEY,
+    watchlist_id INTEGER NOT NULL REFERENCES watchlists(id) ON DELETE CASCADE,
+    symbol TEXT NOT NULL,
+    name TEXT NOT NULL,
+    tag TEXT NOT NULL DEFAULT '',
+    currency TEXT NOT NULL DEFAULT 'USD',
+    sort_order INTEGER NOT NULL DEFAULT 0
+);
+
+-- Tag colors
+CREATE TABLE IF NOT EXISTS tag_colors (
+    tag TEXT PRIMARY KEY,
+    bg TEXT NOT NULL,
+    text TEXT NOT NULL,
+    border TEXT NOT NULL
+);
 ```
-
-**Existing tables — converted to PostgreSQL:**
-
-The current SQLite schema (4 tables: `settings`, `watchlists`, `tickers`, `tag_colors`) must be migrated. Key PostgreSQL equivalents:
-
-| SQLite | PostgreSQL |
-| :--- | :--- |
-| `INTEGER PRIMARY KEY AUTOINCREMENT` | `SERIAL PRIMARY KEY` |
-| `INSERT OR REPLACE` | `INSERT ... ON CONFLICT ... DO UPDATE` (upsert) |
-| `INSERT OR IGNORE` | `INSERT ... ON CONFLICT DO NOTHING` |
-| `?` placeholders | `%s` placeholders (psycopg2) |
-| `COALESCE(MAX(sort_order),-1)` | same syntax, works in PostgreSQL |
-| `datetime('now')` | `NOW()` |
-| `PRAGMA foreign_keys = ON` | Not needed (enforced by default) |
-| `lastrowid` | `RETURNING id` clause |
 
 **Connection management:**
 
-Replace the current `sqlite3` context manager with `psycopg2` connection pooling:
+psycopg2 connection pooling replaces the current `sqlite3` context manager:
 
 ```python
 import psycopg2
 import psycopg2.pool
 from contextlib import contextmanager
 
-# Created once at startup
 _pool = psycopg2.pool.ThreadedConnectionPool(
     minconn=1,
     maxconn=10,
@@ -266,11 +289,41 @@ def get_db():
         _pool.putconn(conn)
 ```
 
-**Seed data — applied on startup after migration:**
+**Key SQL differences from the current SQLite code:**
+- Placeholders: `%s` instead of `?` (psycopg2 convention)
+- Upserts: `INSERT ... ON CONFLICT ... DO UPDATE` instead of `INSERT OR REPLACE`
+- Ignore conflicts: `INSERT ... ON CONFLICT DO NOTHING` instead of `INSERT OR IGNORE`
+- Return IDs: `RETURNING id` instead of `cursor.lastrowid`
+
+**Seed strategy — auto-seed on first startup:**
+
+Instead of manual JSON-to-DB migration scripts, the server seeds itself on first startup. The logic:
+
+1. On startup, after creating tables, check if `watchlists` is empty (`SELECT COUNT(*) FROM watchlists`)
+2. If empty → first deploy. Run the seeder.
+3. If populated → subsequent deploy. Skip seeding.
+
+The seed data lives in `seed_data.py` — a Python module containing the initial watchlists, tickers, tag colors, and default settings as structured data. This replaces the legacy `data/lists.json` and `data/colors.json` files.
+
+```
+seed_data.py exports:
+  SEED_WATCHLISTS: list of dicts (slug, name, short_name, category, description, tag, currency, show_type)
+  SEED_TICKERS:     list of dicts (watchlist_slug, symbol, name, tag, currency)
+  SEED_TAG_COLORS:  dict of {tag: {bg, text, border}}
+  SEED_SETTINGS:    dict of {key: value} (at minimum: GLOBAL_BASE_CURRENCY = "EUR")
+```
+
+**Why `seed_data.py` over JSON files:**
+- **Zero runtime I/O**: No file reads at startup beyond importing a Python module.
+- **Version-controlled**: The seed data is code — it lives in git alongside the schema and server logic.
+- **No deployment checklist**: `pip install && uvicorn server:app` is the entire setup. No "run migrate.py first" step.
+- **Type-safe**: Python dicts can be validated with the same Pydantic models used by the API.
+- **The admin edits everything through the UI after seeding**: The seed data is the starting point. The admin can add, edit, and delete watchlists, tickers, and tag colors through the existing dashboard UI. All changes persist to PostgreSQL and are immediately visible to demo users since both roles read the same data.
+
+**User seeding:**
 
 ```python
 # Demo user: always seeded. Credentials from env vars (with defaults).
-# Using INSERT ... ON CONFLICT DO NOTHING (idempotent).
 cursor.execute("""
     INSERT INTO users (email, password_hash, role)
     VALUES (%s, %s, 'demo')
@@ -288,14 +341,17 @@ if admin_email and admin_password:
 
 **Indexes:**
 - `users.email` — unique index (from UNIQUE constraint). Used on every login lookup.
-- Equivalent indexes on existing tables (migrated from SQLite schema).
+- `watchlists.slug` — unique index (from UNIQUE constraint). Used for list lookups.
+- `tickers.watchlist_id` — indexed via the foreign key reference. Used when loading all tickers for a watchlist.
+- `tickers.sort_order` — no index needed (small per-list sorts, done in application code).
+- `tag_colors.tag` — primary key. Used for lookups by tag name.
 
 **State location:**
 - **User credentials**: PostgreSQL `users` table (persistent)
 - **JWT**: Browser `localStorage` (cleared on logout or expiry). Expires after **24 hours** for both admin and demo roles.
 - **Demo user's temporary settings**: `app.js` state object in memory (lost on page refresh or logout)
 - **Price cache**: Server-side `_price_cache` dict in memory (5-min TTL, lost on server restart)
-- **Watchlist data**: PostgreSQL (persistent, shared across all users)
+- **Watchlist data**: PostgreSQL (persistent, shared across all users — admin edits are visible to demo immediately)
 
 **JWT expiry — design decision:**
 
@@ -304,15 +360,6 @@ Both admin and demo tokens expire after **24 hours**. This balances security and
 - **No refresh token infrastructure**: Adding refresh tokens would require a token store, rotation logic, and additional client complexity — disproportionate for a single-admin personal tool with a public demo.
 - **Demo tokens**: Carry zero privileges (view-only). Even if stolen, the attacker can only see public financial data. 24h prevents a leaked token from persisting indefinitely.
 - **Admin tokens**: 24h limits the exposure window to one day. The admin is a single person who will notice unusual activity quickly. For a banking or multi-user app, shorter expiry + refresh would be required, but this is a personal dashboard.
-
-**Migration strategy:**
-
-A one-time migration script (`scripts/migrate_to_pg.py`) converts the existing `data.db` SQLite database to PostgreSQL:
-1. Read all rows from each SQLite table
-2. Insert into equivalent PostgreSQL tables
-3. Reset sequences (e.g., `SELECT setval('tickers_id_seq', MAX(id))`)
-
-Existing seed scripts (`scripts/migrate.py`) should be updated to target PostgreSQL directly. The legacy `data/lists.json` and `data/colors.json` files remain as seed data sources.
 
 ---
 
@@ -480,7 +527,7 @@ None. This system has no event-driven or asynchronous communication. All interac
 ## Risks & Tradeoffs
 
 - **JWT in localStorage vs httpOnly cookie** — **Stored in localStorage.** Tradeoff: localStorage is readable by JavaScript, so an XSS vulnerability could leak the token. However, httpOnly cookies require CSRF protection and complicate the vanilla JS frontend. For a public demo app with no PII and no financial transactions, the localStorage approach is the pragmatically correct choice. If this were a banking app, cookies + CSRF tokens would be required.
-- **PostgreSQL vs SQLite** — **PostgreSQL.** Tradeoff: PostgreSQL requires an external service (or Coolify's managed PostgreSQL), adding a deployment dependency. In return, it handles concurrent reads and writes more robustly, uses standard SQL, and is the explicitly requested database. The existing SQLite data must be migrated once via `scripts/migrate_to_pg.py`.
+- **PostgreSQL as separate Coolify service** — The database runs in its own Coolify PostgreSQL instance, not embedded in the app. The app connects via an internal `DATABASE_URL` (e.g., `postgresql://marketdeck:pass@postgres-service:5432/marketdeck`). This is a standard Coolify pattern — one service for the app, one for the database, connected via internal networking. No Docker Compose, no Dockerfile. The app auto-creates tables and seeds data on first startup.
 - **Single index.html with view toggles vs separate login page** — **Single HTML with view toggles.** Tradeoff: the login screen HTML is sent to every visitor, including authenticated ones (though hidden by JS). This is consistent with how the app already toggles between home and list views. A separate login page would require server-side HTML serving or a second HTML file, adding complexity without meaningful benefit.
 - **slowapi vs manual rate limiter** — **slowapi.** Tradeoff: slowapi adds one dependency (`slowapi` + `limits`). A manual rate limiter using a dict of `{ip: [timestamps]}` would be ~20 lines of code. slowapi is chosen because it handles edge cases (clock skew, memory cleanup of expired entries, `Retry-After` headers) that a manual implementation would eventually need. Cost of the dependency is low.
 - **Admin seeding via env vars vs management CLI** — **Env vars.** Tradeoff: environment variables are the standard way to configure deployed services. A management CLI (`python scripts/create-admin.py`) would be more secure (password not in env) but requires shell access to the server. For a Coolify deployment, env vars are the path of least friction. After seeding, the admin can change their password via the in-app form — the env var is only used once at initial deploy.
@@ -495,5 +542,5 @@ All open questions from the concept are resolved:
 - **Logout UX** — **Yes, there is a logout button.** It appears in the top bar for both admin and demo users. Clears `localStorage` (removes JWT), resets all in-memory state, and shows the login view. Implemented as a `logout()` function in `app.js`.
 - **JWT expiry duration** — **24 hours for both admin and demo.** This balances security and UX. Demo tokens have zero privileges (view-only), so even if stolen, there is no damage — but 24h prevents indefinite persistence. Admin tokens carry write access, so a 24h window limits exposure without forcing daily re-logins. A refresh token infrastructure was considered but rejected as disproportionate overhead for a single-admin personal tool.
 - **Admin password changes** — **In-app form, admin only.** A "Change Password" modal accessible from the dashboard (admin role only). Endpoint: `PUT /api/auth/password`. Accepts current password + new password. Verifies current password against bcrypt hash, updates if correct, returns 400 if wrong. Demo users cannot access this — the demo password is shared and configured via env vars only.
-- **Deployment strategy** — **Coolify GitHub clone, no Dockerfile.** Coolify auto-detects Python from `requirements.txt`. PostgreSQL is provisioned separately (Coolify service or external). Env vars configured in Coolify's service settings.
-- **Database** — **PostgreSQL.** Migration from the existing SQLite `data.db` is a one-time operation via `scripts/migrate_to_pg.py`.
+- **Deployment strategy** — **Coolify GitHub clone, no Dockerfile.** Coolify auto-detects Python from `requirements.txt`. PostgreSQL is a separate Coolify service. Env vars configured in Coolify's service settings. Database auto-seeds on first startup — no manual migration step.
+- **Database** — **PostgreSQL, clean setup.** No backward compatibility with SQLite. Tables are created via `CREATE TABLE IF NOT EXISTS` on startup. Seed data is a Python module (`seed_data.py`) inserted on first deploy when `watchlists` is empty. The admin edits everything through the UI after seeding.
