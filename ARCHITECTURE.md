@@ -192,10 +192,13 @@ All interactions are synchronous HTTP request/response. There are no async hando
 | :--- | :--- | :--- |
 | Missing JWT | 401 `{"detail": "Not authenticated"}` | Frontend redirects to login view |
 | Expired/invalid JWT | 401 `{"detail": "Token expired"}` | Frontend clears localStorage, shows login |
+| Invalid request body (admin submits malformed data) | 422 `{"detail": [{"loc": ["body", "field"], "msg": "...", "type": "..."}]}` | Pydantic validation rejects the request. Frontend shows the error message. No partial writes occur. |
 | Demo user tries write | 403 `{"detail": "Read-only account"}` | Frontend catches 403, shows toast (shouldn't happen since buttons are hidden) |
 | Rate limit exceeded | 429 `{"detail": "Too many requests"}` + `Retry-After` header | Frontend shows error, user waits. Cached data still served. |
 | Yahoo Finance fails | 200 with `null` for failed tickers | Existing retry logic in `_download_prices`. Frontend shows "N failed" in status bar. |
-| DB connection fails | 500 | Coolify health check catches this, triggers restart |
+| DB connection fails (mid-request) | 500 | Coolify health check catches persistent failures, triggers restart |
+| DB connection fails (at startup) | Server refuses to start | Error printed to stderr. Coolify shows deployment failure. Check `DATABASE_URL` env var. |
+| Missing admin env vars at startup | Server refuses to start | Error printed to stderr: `MARKETDECK_ADMIN_EMAIL and MARKETDECK_ADMIN_PASSWORD are required`. Coolify shows deployment failure. Set the env vars in service config. |
 | yfinance import fails at startup | Server fails to start | Coolify shows deployment failure. Fix `requirements.txt`. |
 
 ---
@@ -206,11 +209,11 @@ All interactions are synchronous HTTP request/response. There are no async hando
 
 | Entity | Table | Key Fields | Relationships |
 | :--- | :--- | :--- | :--- |
-| **User** | `users` | `id INTEGER PK`, `email TEXT UNIQUE NOT NULL`, `password_hash TEXT NOT NULL`, `role TEXT NOT NULL CHECK(role IN ('admin','demo'))`, `created_at TEXT DEFAULT datetime('now')` | None |
-| **Setting** | `settings` (existing) | `key TEXT PK`, `value TEXT` | None |
-| **Watchlist** | `watchlists` (existing) | `id INTEGER PK`, `slug TEXT UNIQUE`, `name`, `short_name`, `category`, `description`, `tag`, `currency`, `show_type` | Has many `tickers` (FK: `tickers.watchlist_id`) |
-| **Ticker** | `tickers` (existing) | `id INTEGER PK`, `watchlist_id INTEGER FK`, `symbol`, `name`, `tag`, `currency`, `sort_order` | Belongs to `watchlists` (CASCADE delete) |
-| **Tag color** | `tag_colors` (existing) | `tag TEXT PK`, `bg TEXT`, `text TEXT`, `border TEXT` | None |
+| **User** | `users` | `id SERIAL PRIMARY KEY`, `email TEXT UNIQUE NOT NULL`, `password_hash TEXT NOT NULL`, `role TEXT NOT NULL CHECK(role IN ('admin','demo'))`, `created_at TIMESTAMP NOT NULL DEFAULT NOW()` | None |
+| **Setting** | `settings` | `key TEXT PRIMARY KEY`, `value TEXT NOT NULL` | None |
+| **Watchlist** | `watchlists` | `id SERIAL PRIMARY KEY`, `slug TEXT UNIQUE NOT NULL`, `name TEXT NOT NULL`, `short_name TEXT NOT NULL`, `category TEXT NOT NULL`, `description TEXT`, `tag TEXT`, `currency TEXT`, `show_type BOOLEAN` | Has many `tickers` (FK: `tickers.watchlist_id`) |
+| **Ticker** | `tickers` | `id SERIAL PRIMARY KEY`, `watchlist_id INTEGER NOT NULL REFERENCES watchlists(id) ON DELETE CASCADE`, `symbol TEXT NOT NULL`, `name TEXT NOT NULL`, `tag TEXT`, `currency TEXT`, `sort_order INTEGER` | Belongs to `watchlists` (CASCADE delete) |
+| **Tag color** | `tag_colors` | `tag TEXT PRIMARY KEY`, `bg TEXT NOT NULL`, `text TEXT NOT NULL`, `border TEXT NOT NULL` | None |
 
 ### Schema Notes
 
@@ -299,9 +302,24 @@ def get_db():
 
 Instead of manual JSON-to-DB migration scripts, the server seeds itself on first startup. The logic:
 
-1. On startup, after creating tables, check if `watchlists` is empty (`SELECT COUNT(*) FROM watchlists`)
-2. If empty → first deploy. Run the seeder.
-3. If populated → subsequent deploy. Skip seeding.
+**Step 0 — Validate required env vars (fail-fast):**
+Before connecting to the database, check that `MARKETDECK_ADMIN_EMAIL` and `MARKETDECK_ADMIN_PASSWORD` are set. If either is missing, print a clear error to stderr and exit with code 1:
+
+```
+ERROR: MARKETDECK_ADMIN_EMAIL and MARKETDECK_ADMIN_PASSWORD are required.
+Set these environment variables before starting the server.
+```
+
+This prevents deploying a server with no admin account. The error appears in Coolify's deployment logs, making the problem immediately obvious.
+
+**Step 1 — Create tables:**
+Run `CREATE TABLE IF NOT EXISTS` for all tables (users, settings, watchlists, tickers, tag_colors). Idempotent — safe on every startup.
+
+**Step 2 — Seed users:**
+Always seed the demo user (from `MARKETDECK_DEMO_EMAIL` / `MARKETDECK_DEMO_PASSWORD`, with defaults). Always seed the admin user (from the required env vars). Both use `INSERT ... ON CONFLICT DO NOTHING` — idempotent, safe on every startup.
+
+**Step 3 — Seed watchlist data (first deploy only):**
+Check if `watchlists` is empty (`SELECT COUNT(*) FROM watchlists`). If empty → first deploy. Insert seed data from `seed_data.py`. If populated → skip.
 
 The seed data lives in `seed_data.py` — a Python module containing the initial watchlists, tickers, tag colors, and default settings as structured data. This replaces the legacy `data/lists.json` and `data/colors.json` files.
 
@@ -330,13 +348,12 @@ cursor.execute("""
     ON CONFLICT (email) DO NOTHING
 """, (demo_email, bcrypt_hash(demo_password)))
 
-# Admin user: seeded only if env vars are set.
-if admin_email and admin_password:
-    cursor.execute("""
-        INSERT INTO users (email, password_hash, role)
-        VALUES (%s, %s, 'admin')
-        ON CONFLICT (email) DO NOTHING
-    """, (admin_email, bcrypt_hash(admin_password)))
+# Admin user: always seeded. Server refused to start if env vars were missing.
+cursor.execute("""
+    INSERT INTO users (email, password_hash, role)
+    VALUES (%s, %s, 'admin')
+    ON CONFLICT (email) DO NOTHING
+""", (admin_email, bcrypt_hash(admin_password)))
 ```
 
 **Indexes:**
@@ -500,7 +517,7 @@ None. This system has no event-driven or asynchronous communication. All interac
 | **Latency** | Login <200ms, token validation <10ms, price fetch 2–10s, cached price <5ms, dashboard render <100ms | Login: single bcrypt verify + JWT sign. Token: symmetric HS256 decode. Prices: dominated by Yahoo Finance round-trip. Cached: in-memory dict lookup. Render: all client-side JS computation. |
 | **Scalability** | 50 concurrent demo users, 1 admin | Single server process. PostgreSQL handles concurrent reads efficiently. yfinance downloads batch all tickers in one call — no per-ticker fan-out. Bottleneck is Yahoo Finance network latency, not local compute. Rate limiting caps at 30 price requests/min/IP — with 5-min cache, most hits are cache serves. |
 | **Security** | No data exposure, no privilege escalation, no brute-force credential attacks | JWT signed with HS256 (secret from `MARKETDECK_JWT_SECRET` env var). Passwords hashed with bcrypt (passlib). All SQL parametrized via psycopg2 `%s` placeholders. Login rate-limited at 5 attempts/min/IP. JWT expires after 24h for both roles. Secrets never in source code — only env vars. The demo password is public by design, so its exposure is not a vulnerability. Static file server rejects path traversal (existing `resolve(strict=False)` + `relative_to` guard). |
-| **Observability** | Login attempts, rate limit hits, yfinance failures must be loggable | `print()` calls for: failed login attempts (email + IP), rate limit 429s (IP + endpoint), yfinance download errors (existing). For production, these are picked up by stdout and visible in Coolify's deployment logs. No structured logging framework needed at this scale. |
+| **Observability** | Login attempts, rate limit hits, yfinance failures must be loggable | `print()` calls for: startup validation (missing env vars, DB connection errors, seed completion), failed login attempts (email + IP), rate limit 429s (IP + endpoint), yfinance download errors (existing). For production, these are picked up by stdout/stderr and visible in Coolify's deployment logs. No structured logging framework needed at this scale. |
 | **Operability** | Deploy via Coolify GitHub clone. Config via env vars. PostgreSQL as external service. | **No Dockerfile.** Coolify auto-detects Python from `requirements.txt` and runs `uvicorn server:app --host 0.0.0.0 --port $PORT`. Health check: `GET /api/auth/demo-info` (returns 200 if server is up and DB is reachable). Rollback: redeploy previous commit from git history. Database is external — use Coolify's PostgreSQL service or a separate managed PostgreSQL instance. |
 
 ### Environment Variables
@@ -509,8 +526,8 @@ None. This system has no event-driven or asynchronous communication. All interac
 | :--- | :--- | :--- | :--- |
 | `DATABASE_URL` | **Yes** | — | PostgreSQL connection string. Format: `postgresql://user:password@host:5432/dbname`. |
 | `MARKETDECK_JWT_SECRET` | **Yes** | — | HS256 signing key. Generate with `openssl rand -hex 32`. |
-| `MARKETDECK_ADMIN_EMAIL` | **Yes** (on first deploy) | — | Seeds the admin user on first startup. |
-| `MARKETDECK_ADMIN_PASSWORD` | **Yes** (on first deploy) | — | Seeds the admin user on first startup. |
+| `MARKETDECK_ADMIN_EMAIL` | **Yes** | — | Admin account email. Server refuses to start if not set. |
+| `MARKETDECK_ADMIN_PASSWORD` | **Yes** | — | Admin account password. Server refuses to start if not set. |
 | `MARKETDECK_DEMO_EMAIL` | No | `demo@marketdeck.app` | Demo account email (public). |
 | `MARKETDECK_DEMO_PASSWORD` | No | `marketdeck` | Demo account password (public). |
 | `PORT` | No | `8000` | Server port. Coolify sets this automatically. |
@@ -518,9 +535,9 @@ None. This system has no event-driven or asynchronous communication. All interac
 **Coolify deployment notes:**
 - Create a PostgreSQL database in Coolify (or use an existing one). Set the `DATABASE_URL` env var to its connection string.
 - Clone the GitHub repo into Coolify. It auto-detects Python from `requirements.txt`.
-- Set all environment variables in the Coolify service config.
-- The first deploy seeds the `users` table (admin from env vars, demo with defaults).
-- Database schema migrations run on startup (`CREATE TABLE IF NOT EXISTS`).
+- Set all environment variables in the Coolify service config. **`MARKETDECK_ADMIN_EMAIL`, `MARKETDECK_ADMIN_PASSWORD`, and `MARKETDECK_JWT_SECRET` are mandatory** — the server will refuse to start without them.
+- The first deploy creates all tables, seeds the admin + demo users, and inserts the default watchlist data.
+- On subsequent deploys, `CREATE TABLE IF NOT EXISTS` and `INSERT ... ON CONFLICT DO NOTHING` are no-ops — existing data is untouched.
 
 ---
 
