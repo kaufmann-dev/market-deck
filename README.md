@@ -112,7 +112,7 @@ Changing `MARKETDECK_ADMIN_PASSWORD` later does not overwrite an existing databa
 
 Dashboard seed data is first-deploy only. If the `watchlists` table already has rows, the app skips watchlist/ticker/tag/settings seeding.
 
-Admin and demo users are inserted with `ON CONFLICT DO NOTHING`, so redeploys do not reset the admin password.
+Admin users are inserted with `ON CONFLICT DO NOTHING`, so redeploys do not reset the admin password. Demo user seeding is also idempotent.
 
 ### Startup Retries
 
@@ -120,7 +120,7 @@ The server retries the PostgreSQL connection during startup. This helps when Coo
 
 ### Demo Account
 
-The demo account is a real database user with role `demo`, but it does not use public email/password credentials. The **Login as Demo** button calls `POST /api/auth/demo-login` and receives a read-only demo session.
+The demo account is a real database user with role `demo`, but it does not use public credentials. The **Login as Demo** button calls `POST /api/auth/demo-login` and receives a read-only demo session.
 
 Demo users can browse data and fetch prices, but write endpoints return `403`.
 
