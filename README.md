@@ -14,7 +14,10 @@ This repository is ready for a Coolify deployment with PostgreSQL as a separate 
 What is already included:
 
 - `requirements.txt` for Nixpacks/Python dependency detection.
+- `.python-version` to keep production on Python 3.12.
+- `nixpacks.toml` with an explicit production start command.
 - PostgreSQL schema creation on app startup.
+- PostgreSQL startup retries to handle Coolify database/app boot timing.
 - First-start seed data from `seed_data.py`.
 - Seeded admin and demo users.
 - JWT login, session restore, logout, and role-aware UI.
@@ -38,7 +41,9 @@ Important deployment notes:
 .
 |-- server.py
 |-- seed_data.py
+|-- .python-version
 |-- requirements.txt
+|-- nixpacks.toml
 |-- index.html
 `-- static/
     |-- app.js
@@ -72,10 +77,12 @@ Optional variables:
 ```env
 MARKETDECK_DEMO_EMAIL=demo@marketdeck.app
 MARKETDECK_DEMO_PASSWORD=marketdeck
+MARKETDECK_DB_CONNECT_RETRIES=30
+MARKETDECK_DB_CONNECT_RETRY_DELAY=2
 PORT=8000
 ```
 
-`PORT` is usually provided by Coolify from the exposed port. Add it only if your app resource does not set it automatically.
+`PORT` is usually provided by Coolify from the exposed port. If it is not set, the server falls back to `8000`.
 
 Generate a strong JWT secret locally:
 
@@ -92,7 +99,9 @@ Push the project to GitHub or another Git provider connected to Coolify.
 The deployment expects these files to be present in the repository root:
 
 - `server.py`
+- `.python-version`
 - `requirements.txt`
+- `nixpacks.toml`
 - `seed_data.py`
 - `index.html`
 - `static/app.js`
@@ -138,10 +147,10 @@ Port Exposes: 8000
 Set the start command to:
 
 ```bash
-uvicorn server:app --host 0.0.0.0 --port $PORT
+python server.py
 ```
 
-Coolify sets `PORT` from the first exposed port if it is not explicitly configured. If your Coolify instance does not do that, add `PORT=8000` as an environment variable.
+The repository also includes `nixpacks.toml`, so Coolify/Nixpacks can pick this up automatically. The server uses `PORT` when Coolify provides it and falls back to `8000`.
 
 ### 5. Add Application Environment Variables
 
@@ -184,7 +193,7 @@ Click **Deploy**.
 On first startup the app will:
 
 1. Validate required environment variables.
-2. Connect to PostgreSQL.
+2. Connect to PostgreSQL, retrying briefly if the database is still starting.
 3. Create tables if they do not exist.
 4. Seed the demo user.
 5. Seed the admin user.
