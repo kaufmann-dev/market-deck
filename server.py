@@ -19,7 +19,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from pydantic import BaseModel
-from psycopg2.extras import RealDictCursor
+from psycopg2.extras import Json, RealDictCursor
 from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
@@ -57,6 +57,7 @@ def _float_env(name: str, default: float) -> float:
 
 DB_CONNECT_RETRIES = _int_env("MARKETDECK_DB_CONNECT_RETRIES", 30)
 DB_CONNECT_RETRY_DELAY = _float_env("MARKETDECK_DB_CONNECT_RETRY_DELAY", 2)
+PRICE_CACHE_TTL_SECONDS = _int_env("MARKETDECK_PRICE_CACHE_TTL_SECONDS", 3600)
 
 
 def _validate_required_env():
@@ -335,7 +336,21 @@ def init_database():
                 """
             )
             cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS price_cache (
+                    account_email TEXT NOT NULL,
+                    ticker TEXT NOT NULL,
+                    data JSONB NOT NULL,
+                    cached_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    PRIMARY KEY (account_email, ticker)
+                )
+                """
+            )
+            cur.execute(
                 "CREATE INDEX IF NOT EXISTS idx_tickers_watchlist_id ON tickers(watchlist_id)"
+            )
+            cur.execute(
+                "CREATE INDEX IF NOT EXISTS idx_price_cache_cached_at ON price_cache(cached_at)"
             )
             conn.commit()
 
@@ -769,33 +784,81 @@ def delete_tag_color(
     return {"ok": True}
 
 
-CACHE_TTL = 300
-_price_cache = {}
-
-
 def _is_cacheable_series(data):
     return isinstance(data, list) and len(data) >= 2
 
 
-def _is_cached(ticker):
-    entry = _price_cache.get(ticker)
-    if entry and not _is_cacheable_series(entry["data"]):
-        _price_cache.pop(ticker, None)
-        return False
-    if entry and (_time.time() - entry["ts"]) < CACHE_TTL:
-        return True
-    return False
+def _account_cache_key(current_user: CurrentUser) -> str:
+    return current_user.email.strip().lower()
 
 
-def _get_cached(ticker):
-    return _price_cache[ticker]["data"]
+def _unique_tickers(tickers: List[str]) -> List[str]:
+    seen = set()
+    unique = []
+    for ticker in tickers:
+        cleaned = " ".join(str(ticker or "").split())
+        if not cleaned or cleaned in seen:
+            continue
+        seen.add(cleaned)
+        unique.append(cleaned)
+    return unique
 
 
-def _set_cached(ticker, data):
-    if not _is_cacheable_series(data):
-        _price_cache.pop(ticker, None)
+def _get_cached_prices(account_email: str, tickers: List[str]):
+    if not tickers:
+        return {}
+
+    with get_db() as conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            """
+            DELETE FROM price_cache
+            WHERE cached_at < NOW() - (%s * INTERVAL '1 second')
+            """,
+            (PRICE_CACHE_TTL_SECONDS,),
+        )
+        cur.execute(
+            """
+            SELECT ticker, data
+            FROM price_cache
+            WHERE account_email = %s
+              AND ticker = ANY(%s)
+              AND cached_at >= NOW() - (%s * INTERVAL '1 second')
+            """,
+            (account_email, tickers, PRICE_CACHE_TTL_SECONDS),
+        )
+        rows = cur.fetchall()
+        conn.commit()
+
+    cached = {}
+    for row in rows:
+        data = row["data"]
+        if _is_cacheable_series(data):
+            cached[row["ticker"]] = data
+    return cached
+
+
+def _set_cached_prices(account_email: str, price_data):
+    cacheable = {
+        ticker: data
+        for ticker, data in price_data.items()
+        if _is_cacheable_series(data)
+    }
+    if not cacheable:
         return
-    _price_cache[ticker] = {"data": data, "ts": _time.time()}
+
+    with get_db() as conn, conn.cursor() as cur:
+        for ticker, data in cacheable.items():
+            cur.execute(
+                """
+                INSERT INTO price_cache (account_email, ticker, data, cached_at)
+                VALUES (%s, %s, %s, NOW())
+                ON CONFLICT (account_email, ticker) DO UPDATE SET
+                    data = EXCLUDED.data,
+                    cached_at = EXCLUDED.cached_at
+                """,
+                (account_email, ticker, Json(data)),
+            )
+        conn.commit()
 
 
 def _download_prices(tickers):
@@ -899,19 +962,16 @@ def fetch_prices(
     body: PricesRequest,
     current_user: CurrentUser = Depends(get_current_user),
 ):
-    tickers = body.tickers
+    tickers = _unique_tickers(body.tickers)
     if not tickers:
         return {}
 
-    result = {}
-    need_fetch = []
-    for ticker in tickers:
-        if _is_cached(ticker):
-            result[ticker] = _get_cached(ticker)
-        else:
-            need_fetch.append(ticker)
+    account_email = _account_cache_key(current_user)
+    result = _get_cached_prices(account_email, tickers)
+    need_fetch = [ticker for ticker in tickers if ticker not in result]
 
     if need_fetch:
+        fresh = {}
         try:
             fresh = _download_prices(need_fetch)
             missing = [ticker for ticker, data in fresh.items() if data is None]
@@ -924,7 +984,6 @@ def fetch_prices(
 
             for ticker, data in fresh.items():
                 result[ticker] = data
-                _set_cached(ticker, data)
         except Exception as e:
             print(f"yfinance download error: {e}")
             for ticker in need_fetch:
@@ -934,7 +993,8 @@ def fetch_prices(
                     print(f"yfinance fallback error for {ticker}: {retry_error}")
                     data = None
                 result[ticker] = data
-                _set_cached(ticker, data)
+                fresh[ticker] = data
+        _set_cached_prices(account_email, fresh)
 
     for ticker in tickers:
         if ticker not in result:
@@ -945,8 +1005,11 @@ def fetch_prices(
 
 @app.delete("/api/prices/cache")
 def clear_price_cache(current_user: CurrentUser = Depends(require_admin)):
-    _price_cache.clear()
-    return {"ok": True}
+    with get_db() as conn, conn.cursor() as cur:
+        cur.execute("DELETE FROM price_cache")
+        deleted = cur.rowcount
+        conn.commit()
+    return {"ok": True, "deleted": deleted}
 
 
 @app.get("/{path:path}")
