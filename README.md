@@ -1,91 +1,77 @@
-# Market Deck
+# MarketDeck
 
-Market Deck is a local dashboard for ranking financial assets by momentum and viewing trailing monthly returns in a heatmap. It supports multiple watchlists, server-side Yahoo Finance price loading, historical FX conversion into a shared base currency, and inline editing backed by SQLite.
-
-## Features
-
-- Momentum rankings for 1M, 3M, 6M, and 12M lookbacks
-- Monthly heatmap with a trailing 12M return column
-- Multiple editable watchlists with per-ticker tags and currencies
-- Global base currency conversion using historical FX series from Yahoo Finance
-- Built-in CRUD UI for watchlists, tickers, and tag colors
-- Server-side price fetching with caching and safer request handling
-- Client-side reuse of fetched ticker and FX histories across list visits
-- Watchlist categories are stored and edited in uppercase
-- Tag color names are stored and edited in uppercase
+MarketDeck is a public-demo-ready financial dashboard for ranking assets by momentum and viewing trailing monthly returns in a heatmap. It supports admin and demo logins, PostgreSQL persistence, server-side Yahoo Finance price loading, historical FX conversion into a shared base currency, and rate-limited price fetching.
 
 ## Stack
 
 - Frontend: vanilla HTML, CSS, and JavaScript
 - Backend: FastAPI + Uvicorn
-- Database: SQLite (`data.db`)
+- Database: PostgreSQL
+- Auth: JWT with bcrypt password hashes
+- Rate limiting: slowapi
 - Market data: Yahoo Finance via `yfinance`
-
-## Project Structure
-
-```text
-.
-|-- index.html
-|-- server.py
-|-- static/
-|   |-- app.js
-|   `-- styles.css
-|-- scripts/
-|   |-- get_volumes.py
-|   `-- migrate.py
-`-- data/
-    |-- colors.json
-    |-- lists.json
-    `-- volumes.json
-```
-
-`data.db` is generated locally and is ignored by git.
 
 ## Setup
 
-1. Install Python 3.10+.
-2. Install dependencies:
+Install Python 3.11+ and PostgreSQL, then install dependencies:
 
 ```bash
-pip install fastapi uvicorn pydantic yfinance pandas
+pip install -r requirements.txt
 ```
 
-3. If you do not already have `data.db`, create it from the legacy JSON files:
+Set the required environment variables:
 
 ```bash
-python scripts/migrate.py
+export DATABASE_URL="postgresql://user:password@localhost:5432/marketdeck"
+export MARKETDECK_JWT_SECRET="replace-with-a-long-random-secret"
+export MARKETDECK_ADMIN_EMAIL="admin@example.com"
+export MARKETDECK_ADMIN_PASSWORD="change-me"
 ```
 
-4. Start the server:
+Optional demo credentials can also be configured:
 
 ```bash
-python server.py
+export MARKETDECK_DEMO_EMAIL="demo@marketdeck.app"
+export MARKETDECK_DEMO_PASSWORD="marketdeck"
 ```
 
-5. Open [http://localhost:8000](http://localhost:8000).
-
-## Utilities
-
-### Rebuild the database
+Start the app locally:
 
 ```bash
-python scripts/migrate.py
+uvicorn server:app --host 0.0.0.0 --port 8000
 ```
 
-This recreates `data.db` from `data/lists.json` and `data/colors.json`.
+Open [http://localhost:8000](http://localhost:8000).
 
-Warning: running it again destroys existing UI edits stored in the database.
+## Production
 
-### Refresh cached volume data
+Coolify should deploy this repository as a GitHub clone Python app. No Dockerfile or Docker Compose file is required. Coolify auto-detects Python from `requirements.txt` and runs:
 
 ```bash
-python scripts/get_volumes.py
+uvicorn server:app --host 0.0.0.0 --port $PORT
 ```
 
-This reads `data/lists.json` and writes `data/volumes.json`.
+Create PostgreSQL as a separate Coolify service and set `DATABASE_URL` to that database connection string. Required production variables are:
+
+- `DATABASE_URL`
+- `MARKETDECK_JWT_SECRET`
+- `MARKETDECK_ADMIN_EMAIL`
+- `MARKETDECK_ADMIN_PASSWORD`
+
+The server creates tables and seeds the admin, demo user, settings, watchlists, tickers, and tag colors on first startup. Health checks can use:
+
+```text
+GET /api/auth/demo-info
+```
+
+The project concept originally referenced SQLite backward compatibility, but the validated architecture resolves deployment to a clean PostgreSQL setup with no SQLite migration. PostgreSQL and `seed_data.py` are the implementation source of truth for this build.
 
 ## API
 
+- `POST /api/auth/login` logs in and returns a JWT
+- `GET /api/auth/me` validates a JWT and returns the current user
+- `GET /api/auth/demo-info` returns public demo credentials
+- `PUT /api/auth/password` changes the current admin password
 - `GET /api/init` returns settings, tag colors, watchlists, and tickers
 - `GET /api/settings` returns all settings
 - `PUT /api/settings/{key}` updates a setting such as `GLOBAL_BASE_CURRENCY`
@@ -100,9 +86,4 @@ This reads `data/lists.json` and writes `data/volumes.json`.
 - `POST /api/prices` fetches historical price data
 - `DELETE /api/prices/cache` clears the server-side price cache
 
-## Notes
-
-- The app serves local files through a guarded catch-all route and rejects path traversal attempts.
-- The frontend now keeps list loads alive in the background when you switch views quickly, so returning to a still-loading list reuses the existing request instead of restarting it.
-- The server retries tickers that come back missing from a batch Yahoo Finance response, which helps reduce partial list loads.
-- Price and CRUD requests now surface HTTP errors instead of silently acting like they succeeded.
+All API endpoints except `/api/auth/login` and `/api/auth/demo-info` require `Authorization: Bearer <token>`.

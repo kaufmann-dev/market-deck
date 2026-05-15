@@ -13,7 +13,29 @@
   <link rel="stylesheet" href="static/styles.css?v=2" />
 </head>
 
-<body>
+<body class="auth-pending">
+
+  <!-- ═══ Login View ═══ -->
+  <div id="login-view" class="login-view">
+    <div class="login-panel">
+      <div class="login-kicker">MarketDeck</div>
+      <h1>Sign In</h1>
+      <form id="login-form" class="login-form" onsubmit="handleLoginSubmit(event)">
+        <label for="login-email">Email</label>
+        <input id="login-email" type="email" autocomplete="username" required />
+        <label for="login-password">Password</label>
+        <input id="login-password" type="password" autocomplete="current-password" required />
+        <div id="login-error" class="login-error" aria-live="polite"></div>
+        <button type="submit" class="login-submit">Login</button>
+      </form>
+      <div class="demo-credentials">
+        <div class="demo-label">Demo Credentials</div>
+        <div><span>Email</span><code id="demo-email">demo@marketdeck.app</code></div>
+        <div><span>Password</span><code id="demo-password">marketdeck</code></div>
+        <button type="button" onclick="loginAsDemo()">Login as Demo</button>
+      </div>
+    </div>
+  </div>
 
   <!-- ═══ Mobile Nav ═══ -->
   <button id="mobile-nav-toggle" class="mobile-nav-toggle" onclick="toggleMobileNav()">
@@ -28,6 +50,11 @@
 
   <!-- ═══ Main Content ═══ -->
   <div class="main">
+    <div id="session-bar" class="session-bar" style="display:none;">
+      <span id="session-label" class="session-label"></span>
+      <button id="change-password-btn" type="button" onclick="openPasswordModal()">Change Password</button>
+      <button type="button" onclick="logout()">Logout</button>
+    </div>
 
     <!-- ─── HOMEPAGE VIEW ─── -->
     <div id="view-home" style="display:none;">
@@ -147,6 +174,35 @@
       </div>
     </div>
 
+  </div>
+
+  <!-- ═══ Password Change Modal ═══ -->
+  <div id="password-modal" style="display:none;position:fixed;inset:0;z-index:1000;">
+    <div onclick="closePasswordModal()"
+      style="position:absolute;inset:0;background:rgba(0,0,0,.6);backdrop-filter:blur(4px);"></div>
+    <div class="modal-box">
+      <div class="modal-header">
+        <h2>Change Password</h2>
+        <button onclick="closePasswordModal()" class="modal-close-btn">✕</button>
+      </div>
+      <form onsubmit="savePassword(event)">
+        <div class="modal-fields">
+          <div class="modal-field">
+            <label for="pw-current">Current Password</label>
+            <input id="pw-current" type="password" autocomplete="current-password" required />
+          </div>
+          <div class="modal-field">
+            <label for="pw-new">New Password</label>
+            <input id="pw-new" type="password" autocomplete="new-password" required />
+          </div>
+          <div id="password-error" class="login-error" aria-live="polite"></div>
+        </div>
+        <div class="modal-actions">
+          <button type="submit" class="btn-green">Save</button>
+          <button type="button" onclick="closePasswordModal()" class="btn-muted">Cancel</button>
+        </div>
+      </form>
+    </div>
   </div>
 
   <!-- ═══ Ticker Editor Overlay (simplified) ═══ -->
