@@ -29,8 +29,8 @@ from seed_data import SEED_SETTINGS, SEED_TAG_COLORS, SEED_TICKERS, SEED_WATCHLI
 APP_DIR = Path(__file__).resolve().parent
 JWT_ALGORITHM = "HS256"
 JWT_TTL_SECONDS = 86400
-DEMO_EMAIL_DEFAULT = "demo@marketdeck.app"
-DEMO_PASSWORD_DEFAULT = "marketdeck"
+DEMO_EMAIL = "demo@marketdeck.app"
+DEMO_PASSWORD_HASH = "demo-login-only"
 REQUIRED_ENV = [
     "DATABASE_URL",
     "MARKETDECK_JWT_SECRET",
@@ -344,8 +344,6 @@ def init_database():
 
 
 def seed_users(conn):
-    demo_email = os.environ.get("MARKETDECK_DEMO_EMAIL", DEMO_EMAIL_DEFAULT)
-    demo_password = os.environ.get("MARKETDECK_DEMO_PASSWORD", DEMO_PASSWORD_DEFAULT)
     admin_email = os.environ["MARKETDECK_ADMIN_EMAIL"]
     admin_password = os.environ["MARKETDECK_ADMIN_PASSWORD"]
 
@@ -356,7 +354,7 @@ def seed_users(conn):
             VALUES (%s, %s, 'demo')
             ON CONFLICT (email) DO NOTHING
             """,
-            (demo_email, hash_password(demo_password)),
+            (DEMO_EMAIL, DEMO_PASSWORD_HASH),
         )
         cur.execute(
             """
@@ -458,10 +456,7 @@ def shutdown():
 def demo_info():
     with get_db() as conn, conn.cursor() as cur:
         cur.execute("SELECT 1")
-    return {
-        "email": os.environ.get("MARKETDECK_DEMO_EMAIL", DEMO_EMAIL_DEFAULT),
-        "password": os.environ.get("MARKETDECK_DEMO_PASSWORD", DEMO_PASSWORD_DEFAULT),
-    }
+    return {"demoLogin": True}
 
 
 @app.post("/api/auth/login")
@@ -471,9 +466,24 @@ def login(request: Request, body: LoginRequest):
         cur.execute("SELECT email, password_hash, role FROM users WHERE email = %s", (body.email,))
         user = dict_row(cur)
 
-    if not user or not verify_password(body.password, user["password_hash"]):
+    if not user or user["role"] == "demo" or not verify_password(body.password, user["password_hash"]):
         print(f"failed login: email={body.email} ip={get_remote_address(request)}")
         raise HTTPException(401, "Invalid email or password")
+
+    token = create_access_token(user["email"], user["role"])
+    return {"token": token, "email": user["email"], "role": user["role"]}
+
+
+@app.post("/api/auth/demo-login")
+@limiter.limit("10/minute")
+def demo_login(request: Request):
+    with get_db() as conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute("SELECT email, role FROM users WHERE email = %s AND role = 'demo'", (DEMO_EMAIL,))
+        user = dict_row(cur)
+
+    if not user:
+        print(f"failed demo login: demo user missing ip={get_remote_address(request)}")
+        raise HTTPException(503, "Demo login is temporarily unavailable")
 
     token = create_access_token(user["email"], user["role"])
     return {"token": token, "email": user["email"], "role": user["role"]}
