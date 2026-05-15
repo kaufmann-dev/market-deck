@@ -198,16 +198,10 @@ body {
 }
 
 .legal-links {
-  position: fixed;
-  right: 24px;
-  bottom: 18px;
-  z-index: 900;
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 14px;
-  padding: 8px 10px;
-  background: rgba(0, 0, 0, 0.28);
-  backdrop-filter: blur(10px);
 }
 
 .legal-links a {
@@ -228,6 +222,16 @@ body {
 .legal-links a:focus-visible {
   outline: 1px solid var(--text-primary);
   outline-offset: 4px;
+}
+
+.login-legal-links {
+  margin-top: 20px;
+}
+
+.app-legal-links {
+  margin-top: 32px;
+  padding: 24px 0 0;
+  border-top: 1px solid var(--border-subtle);
 }
 
 .session-bar {
@@ -1782,14 +1786,7 @@ tr:hover td {
   }
 
   .main {
-    padding: 60px 16px 56px;
-  }
-
-  .legal-links {
-    right: 50%;
-    bottom: 12px;
-    transform: translateX(50%);
-    gap: 16px;
+    padding: 60px 16px 16px;
   }
 
   .home-grid {
