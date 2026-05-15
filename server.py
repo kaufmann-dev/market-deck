@@ -39,6 +39,26 @@ REQUIRED_ENV = [
 ]
 
 
+def _int_env(name: str, default: int) -> int:
+    try:
+        value = int(os.environ.get(name, ""))
+    except ValueError:
+        return default
+    return value if value > 0 else default
+
+
+def _float_env(name: str, default: float) -> float:
+    try:
+        value = float(os.environ.get(name, ""))
+    except ValueError:
+        return default
+    return value if value > 0 else default
+
+
+DB_CONNECT_RETRIES = _int_env("MARKETDECK_DB_CONNECT_RETRIES", 30)
+DB_CONNECT_RETRY_DELAY = _float_env("MARKETDECK_DB_CONNECT_RETRY_DELAY", 2)
+
+
 def _validate_required_env():
     missing = [name for name in REQUIRED_ENV if not os.environ.get(name)]
     if not missing:
@@ -58,15 +78,8 @@ def _validate_required_env():
         )
     raise SystemExit(1)
 
-
-_validate_required_env()
-
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-_pool = psycopg2.pool.ThreadedConnectionPool(
-    minconn=1,
-    maxconn=10,
-    dsn=os.environ["DATABASE_URL"],
-)
+_pool = None
 
 limiter = Limiter(key_func=get_remote_address)
 app = FastAPI()
@@ -85,11 +98,48 @@ async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
 
 @contextmanager
 def get_db():
+    if _pool is None:
+        raise RuntimeError("Database pool is not initialized")
     conn = _pool.getconn()
     try:
         yield conn
     finally:
         _pool.putconn(conn)
+
+
+def connect_database_pool():
+    global _pool
+    if _pool is not None:
+        return
+
+    _validate_required_env()
+    last_error = None
+    for attempt in range(1, DB_CONNECT_RETRIES + 1):
+        try:
+            _pool = psycopg2.pool.ThreadedConnectionPool(
+                minconn=1,
+                maxconn=10,
+                dsn=os.environ["DATABASE_URL"],
+            )
+            print("database connection pool ready")
+            return
+        except psycopg2.OperationalError as exc:
+            last_error = exc
+            print(
+                f"database connection attempt {attempt}/{DB_CONNECT_RETRIES} failed: {exc}",
+                file=sys.stderr,
+            )
+            if attempt < DB_CONNECT_RETRIES:
+                _time.sleep(DB_CONNECT_RETRY_DELAY)
+
+    raise RuntimeError("Could not connect to PostgreSQL") from last_error
+
+
+def close_database_pool():
+    global _pool
+    if _pool is not None:
+        _pool.closeall()
+        _pool = None
 
 
 def dict_rows(cursor):
@@ -224,6 +274,7 @@ def _normalize_tag(tag: str) -> str:
 
 
 def init_database():
+    connect_database_pool()
     with get_db() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -393,7 +444,14 @@ def seed_initial_data(conn):
     print("seed complete: initial MarketDeck data inserted")
 
 
-init_database()
+@app.on_event("startup")
+def startup():
+    init_database()
+
+
+@app.on_event("shutdown")
+def shutdown():
+    close_database_pool()
 
 
 @app.get("/api/auth/demo-info")
@@ -903,6 +961,6 @@ def serve_static(path: str):
 if __name__ == "__main__":
     import uvicorn
 
-    port = int(os.environ.get("PORT", "8000"))
+    port = _int_env("PORT", 8000)
     print(f"Starting server at http://localhost:{port}")
     uvicorn.run(app, host="0.0.0.0", port=port)
