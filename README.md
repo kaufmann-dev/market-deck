@@ -1,6 +1,6 @@
 # Market Deck
 
-FastAPI + vanilla JavaScript financial dashboard with PostgreSQL persistence, JWT auth, admin/demo roles, and Yahoo Finance price loading.
+Dashboard for ranking financial assets by price momentum — live prices, FX conversion, return heatmaps, and multi-watchlist management — powered by FastAPI, SQLite, and Yahoo Finance.
 
 ## Navigation
 
