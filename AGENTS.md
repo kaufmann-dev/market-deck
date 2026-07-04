@@ -4,7 +4,7 @@ Compact notes for AI agents working in this repo.
 
 ## Project shape
 - **Backend** (`backend/`): packaged FastAPI app (`app/`) on SQLAlchemy 2 + Alembic, PostgreSQL. Layered into `api/` routers, `services/`, `models.py`, `schemas.py`, `security.py`, `config.py` (pydantic-settings), `db.py`, `seed.py`, `migrate.py`.
-- **Frontend** (`frontend/`): Svelte 5 + Vite + TypeScript SPA. Reactive stores in `src/lib/stores/*.svelte.ts` (runes), typed API client in `src/lib/api/`, components in `src/lib/components/`. Built to `frontend/dist/`, which the backend serves (SPA fallback + path-traversal guard in `app/main.py`).
+- **Frontend** (`frontend/`): Svelte 5 + Vite + TypeScript SPA. Reactive stores in `src/lib/stores/*.svelte.ts` (runes), typed API client in `src/lib/api/`, lightweight history routing in `src/lib/stores/router.svelte.ts`, components in `src/lib/components/`. Built to `frontend/dist/`, which the backend serves (SPA fallback + path-traversal guard in `app/main.py`).
 - Deployed as a single container via Coolify/Nixpacks. `.python-version` = 3.12, `.nvmrc` = 20.
 
 ## Local development
@@ -26,7 +26,7 @@ For a production-like run, `npm run build` then open the uvicorn port (8000) dir
 
 ## Environment variables
 Required: `DATABASE_URL`, `MARKETDECK_JWT_SECRET`, `MARKETDECK_ADMIN_EMAIL`, `MARKETDECK_ADMIN_PASSWORD` (pydantic-settings raises on startup if missing).
-Optional: `MARKETDECK_DB_CONNECT_RETRIES` (30), `MARKETDECK_DB_CONNECT_RETRY_DELAY` (2), `MARKETDECK_PRICE_CACHE_TTL_SECONDS` (3600), `MARKETDECK_STATIC_DIR` (defaults to `frontend/dist`), `PORT` (8000).
+Optional: `MARKETDECK_DB_CONNECT_RETRIES` (30), `MARKETDECK_DB_CONNECT_RETRY_DELAY` (2), `MARKETDECK_PRICE_CACHE_TTL_SECONDS` (3600), `MARKETDECK_STOCK_CHART_CACHE_TTL_SECONDS` (900), `MARKETDECK_FUNDAMENTALS_CACHE_TTL_SECONDS` (21600), `MARKETDECK_NEWS_CACHE_TTL_SECONDS` (900), `MARKETDECK_SEARCH_CACHE_TTL_SECONDS` (3600), `MARKETDECK_STATIC_DIR` (defaults to `frontend/dist`), `PORT` (8000).
 `DATABASE_URL` accepts `postgres://` / `postgresql://` and is normalized to `postgresql+psycopg2://` in `config.py`.
 
 ## Database & migrations
@@ -37,10 +37,13 @@ Optional: `MARKETDECK_DB_CONNECT_RETRIES` (30), `MARKETDECK_DB_CONNECT_RETRY_DEL
 ## Metrics / business logic
 - All FX conversion and return math lives server-side in `app/services/metrics.py` (pure functions, injectable `today`). It is a faithful port of the old client math — see the module docstring for the two preserved quirks (JS-style month rollover, USX cents). `GET /api/lists/{slug}/metrics?base=CUR` returns computed lookbacks/monthly/currentPrice; the frontend only ranks (`src/lib/scoring.ts`) and renders.
 - Price fetching (`app/services/yahoo.py`) uses parallel Yahoo chart-JSON requests; results cache in PostgreSQL per account+ticker, failed tickers in a short in-process cooldown (`app/services/price_cache.py`). Both caches are per-process (single-instance). `slowapi` rate-limits the metrics endpoint (`120/minute`).
+- Single-stock data uses `GET /api/search`, `GET /api/stocks/{symbol}`, `/chart`, `/news`, and `/financials`. Chart/search/news are auth-free Yahoo surfaces; fundamentals use `app/services/yahoo_auth.py` for crumb/cookie quoteSummary access and degrade to `fundamentalsAvailable:false` when crumb auth fails.
+- `app/services/technicals.py` is pure indicator math over OHLCV. Global stock/search/news/fundamental JSON payloads cache in `yahoo_cache` via `app/services/stock_cache.py`; this cache is account-agnostic and separate from `price_cache`.
 
 ## Frontend notes
 - No manual cache-busting; Vite emits hashed asset filenames.
-- Icons are bundled via `@lucide/svelte` (no CDN). Google Fonts stay linked in `frontend/index.html`.
+- Icons are bundled via `@lucide/svelte` (no CDN). Charts are bundled via `lightweight-charts` (no CDN). Google Fonts stay linked in `frontend/index.html`.
+- Router state is authoritative for views: `/`, `/list/{slug}`, and `/stock/{symbol}`. The app store holds loaded data and bridges route changes to `loadMetrics` / `loadStock`.
 - Design system ("Terminal Dark") lives in `frontend/src/app.css`, ported from the original stylesheet. Keep DESIGN.md as the source of truth for visual rules.
 
 ## Verification

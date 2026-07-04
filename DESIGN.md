@@ -305,6 +305,12 @@ Cards use `{colors.surface-container-low}` background with a 1px `{colors.border
 
 Status bars communicate system state through border color variation: `{colors.border-strong}` for loading, `{colors.primary}` for success, `{colors.accent-negative}` for error. Data table rows use subtle background changes on hover (`{components.table-row-hover.backgroundColor}`) and for highlighted/selected items (`{components.table-row-highlighted.backgroundColor}`). Inline bar charts render as 4px-height CSS elements with no border-radius.
 
+### Stock Dashboard
+
+Single-stock pages use the same dashboard density as watchlists. The stock header is a band, not a hero: symbol/name/exchange, native-currency price, day change, and KPI tiles appear before the chart. The chart panel is square-cornered, transparent/dark, and uses bundled `lightweight-charts` canvas rendering with monochrome grid lines plus green/red financial state colors.
+
+Global symbol search lives in the sidebar and uses a compact typeahead list. Watchlist table rows may be pointer-clickable, but the ticker cell must remain a real button/link target for keyboard users.
+
 ### Typography Application
 
 Uppercase `{typography.label-md}` labels appear above every control group. Navigation items use `{typography.body-sm}`. Numeric data in tables uses `{typography.data-md}` for prices and percentages, ensuring columnar alignment. Action indicators use Unicode symbols (`●`/`○`) that inherit text color and scale with font-size — zero icon library dependencies.

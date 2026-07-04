@@ -111,3 +111,14 @@ class PriceCache(Base):
     cached_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
+
+
+class YahooCache(Base):
+    __tablename__ = "yahoo_cache"
+    __table_args__ = (Index("idx_yahoo_cache_cached_at", "cached_at"),)
+
+    cache_key: Mapped[str] = mapped_column(Text, primary_key=True)
+    data: Mapped[dict | list] = mapped_column(JSONB, nullable=False)
+    cached_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )

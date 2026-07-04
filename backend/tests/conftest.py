@@ -66,12 +66,12 @@ def clean_db(client):
     """Reset all tables to the freshly-seeded state before each test."""
     from app.db import session_factory
     from app.seed import run_seed
-    from app.services import price_cache
+    from app.services import price_cache, yahoo_auth
 
     with session_factory()() as session:
         session.execute(
             text(
-                "TRUNCATE users, settings, watchlists, tickers, watchlist_tags, price_cache "
+                "TRUNCATE users, settings, watchlists, tickers, watchlist_tags, price_cache, yahoo_cache "
                 "RESTART IDENTITY CASCADE"
             )
         )
@@ -79,6 +79,7 @@ def clean_db(client):
         run_seed(session)
     with price_cache._failure_cache_lock:
         price_cache._failure_cache.clear()
+    yahoo_auth.invalidate()
     yield
 
 
