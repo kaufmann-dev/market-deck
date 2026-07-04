@@ -105,7 +105,7 @@
 
       <div id="status-bar" class="s-load">
         <div class="spinner"></div>
-        <span id="status-text">Select a list to begin…</span>
+        <span id="status-text">No list selected</span>
       </div>
 
       <div id="app">
@@ -115,7 +115,7 @@
             <div class="btn-group" id="lb-btns"></div>
           </div>
           <div class="cg">
-            <label>Top N Assets to Hold</label>
+            <label>Highlighted Assets</label>
             <div class="btn-group" id="tn-btns"></div>
           </div>
           <div class="cg" id="tag-filter-cg" style="display:none;">
@@ -151,7 +151,7 @@
                   <th id="r-th-tag">Tag</th>
                   <th id="ret-hdr">Return</th>
                   <th>Current Price</th>
-                  <th>Signal</th>
+                  <th>Group</th>
                 </tr>
               </thead>
               <tbody id="r-body"></tbody>
@@ -160,7 +160,7 @@
         </div>
 
         <div id="view-h" style="display:none;">
-          <div class="method-note">Monthly returns: last trading day of each month (adjusted close).</div>
+          <div class="method-note">Monthly return history</div>
           <div class="table-wrap">
             <table>
               <thead>
@@ -292,7 +292,7 @@
     </div>
   </div>
   <script src="https://unpkg.com/lucide@1.23.0/dist/umd/lucide.js"></script>
-  <script src="static/app.js?v=7"></script>
+  <script src="static/app.js?v=8"></script>
 </body>
 
 </html>

@@ -962,11 +962,11 @@ function render() {
   const today = new Date();
   const targetDate = new Date(today.getFullYear(), today.getMonth() - state.lb, today.getDate());
   document.getElementById("method-note").textContent =
-    "Return = (today's adj. close) ÷ (adj. close on " + targetDate.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) + ") − 1  ·  " + state.lb + "M momentum  ·  BASE CURRENCY: " + GLOBAL_BASE_CURRENCY;
+    state.lb + "M return · Since " + targetDate.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) + " · Base " + GLOBAL_BASE_CURRENCY;
 
   // Banner
   document.getElementById("banner-lbl").textContent =
-    "Current Holdings — Top " + state.topN + " by " + state.lb + "M Momentum · Equal Weight " + (100 / state.topN).toFixed(0) + "% each";
+    "Highlighted Assets · Top " + state.topN + " · " + state.lb + "M Return";
   const hEl = document.getElementById("holdings");
   const holdingsHtml = selected.map(s => `<div class="hcard">
       <div>
@@ -1006,7 +1006,7 @@ function render() {
         ${s.basePrice ? `<div class="price-info">from ${escapeHtml(sym)}${s.basePrice.toFixed(2)} on ${escapeHtml(baseDateStr)}</div>` : ""}
       </td>
       <td><span class="mono" style="color:#a0aec0">${escapeHtml(priceStr)}</span></td>
-      <td>${isBuy ? `<span class="sig-buy">${icon("circle-dot")} BUY</span>` : `<span class="sig-skip">${icon("circle")} SKIP</span>`}</td>
+      <td>${isBuy ? `<span class="sig-buy">${icon("circle-dot")} TOP ${state.topN}</span>` : `<span class="sig-skip">${icon("circle")} OTHER</span>`}</td>
     </tr>`;
   });
   tbody.innerHTML = rowsHtml.join("");
@@ -1091,7 +1091,7 @@ function renderEditorTickers() {
   if (addBtn) addBtn.disabled = !hasTags;
 
   if (!hasTags) {
-    container.innerHTML = `<div class="editor-empty">Add at least one list tag before adding tickers.</div>`;
+    container.innerHTML = `<div class="editor-empty">No list tags available.</div>`;
     return;
   }
 
@@ -1237,7 +1237,7 @@ async function addTicker() {
   const tag = normalizeTagValue(document.getElementById("ed-add-tag").value);
   const currency = document.getElementById("ed-add-cur").value.trim().toUpperCase() || "USD";
   if (!symbol || !name) return alert("Symbol and Name are required.");
-  if (!tag) return alert("Choose a tag before adding a ticker.");
+  if (!tag) return alert("Tag is unavailable.");
   try {
     const data = await apiFetchJson(`/api/lists/${slug}/tickers`, {
       method: "POST",
