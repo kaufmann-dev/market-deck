@@ -114,6 +114,17 @@ def test_base_override_skips_fx(client, admin_headers, yahoo_mock, metrics_list)
     assert not any("USDEUR" in url for url in requested)
 
 
+def test_metrics_yahoo_chart_uses_relative_range(client, admin_headers, yahoo_mock, metrics_list):
+    response = client.get(f"/api/lists/{metrics_list}/metrics", headers=admin_headers)
+    assert response.status_code == 200
+
+    for call in yahoo_mock.calls:
+        params = call.request.url.params
+        assert params.get("range") == "2y"
+        assert "period1" not in params
+        assert "period2" not in params
+
+
 def test_cache_is_per_account(client, admin_headers, demo_headers, yahoo_mock, metrics_list):
     client.get(f"/api/lists/{metrics_list}/metrics", headers=admin_headers)
     admin_calls = yahoo_mock.call_count

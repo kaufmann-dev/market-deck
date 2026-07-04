@@ -6,7 +6,7 @@ see docs/bugs/slow-global-ticker-loading.md for why yfinance was dropped.
 import logging
 import math
 from concurrent.futures import ThreadPoolExecutor, wait
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import quote
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -17,7 +17,6 @@ from ..config import (
     PRICE_FETCH_MAX_WORKERS,
     PRICE_FETCH_TIMEOUT_SECONDS,
     PRICE_FETCH_TOTAL_TIMEOUT_SECONDS,
-    PRICE_HISTORY_DAYS,
     YAHOO_CHART_BASE_URL,
     YAHOO_QUOTE_SUMMARY_URL,
     YAHOO_SEARCH_URL,
@@ -35,9 +34,16 @@ _HEADERS = {
     "Accept": "application/json,text/plain,*/*",
     "Accept-Language": "en-US,en;q=0.9",
 }
+_CHART_HEADERS = {"User-Agent": "Mozilla/5.0"}
 
 Series = list[dict]  # [{"date": "YYYY-MM-DD", "close": float}, ...]
 OhlcSeries = list[dict]  # [{"date": "YYYY-MM-DD", "open": float, ...}, ...]
+
+
+class PriceDownloadResult(dict):
+    def __init__(self, *args, permanent_failures: set[str] | None = None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.permanent_failures = permanent_failures or set()
 
 
 def is_valid_series(data) -> bool:
@@ -104,11 +110,11 @@ def parse_chart_payload(payload) -> Series | None:
     return points if len(points) >= 2 else None
 
 
-def chart_url(ticker: str, period1: int, period2: int) -> str:
+def chart_url(ticker: str) -> str:
     encoded_ticker = quote(ticker, safe="")
     return (
         f"{YAHOO_CHART_BASE_URL}/{encoded_ticker}"
-        f"?period1={period1}&period2={period2}"
+        "?range=2y"
         "&interval=1d&events=history&includeAdjustedClose=true"
     )
 
@@ -245,10 +251,14 @@ def _normalize_news(item) -> dict:
     }
 
 
-def _fetch_one(client: httpx.Client, ticker: str, period1: int, period2: int) -> Series | None:
-    response = client.get(chart_url(ticker, period1, period2))
+def _fetch_one(client: httpx.Client, ticker: str) -> Series | None:
+    response = client.get(chart_url(ticker))
     response.raise_for_status()
     return parse_chart_payload(response.json())
+
+
+def _permanent_chart_failure(exc: Exception) -> bool:
+    return isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code == 404
 
 
 def download_ohlc(symbol: str, range_: str = "1y", interval: str = "1d") -> dict | None:
@@ -259,7 +269,7 @@ def download_ohlc(symbol: str, range_: str = "1y", interval: str = "1d") -> dict
         "includeAdjustedClose": "true",
     }
     try:
-        with httpx.Client(headers=_HEADERS, timeout=PRICE_FETCH_TIMEOUT_SECONDS) as client:
+        with httpx.Client(headers=_CHART_HEADERS, timeout=PRICE_FETCH_TIMEOUT_SECONDS) as client:
             response = client.get(_chart_endpoint(symbol), params=params)
             response.raise_for_status()
             return parse_chart_ohlc_payload(response.json())
@@ -332,19 +342,17 @@ def fetch_news(symbol: str) -> dict:
     return {"news": [item for item in news if item.get("title")]}
 
 
-def download_prices(tickers: list[str]) -> dict[str, Series | None]:
+def download_prices(tickers: list[str]) -> PriceDownloadResult:
     if not tickers:
-        return {}
+        return PriceDownloadResult()
 
-    now = datetime.now(UTC)
-    period1 = int((now - timedelta(days=PRICE_HISTORY_DAYS)).timestamp())
-    period2 = int(now.timestamp())
-    result: dict[str, Series | None] = {ticker: None for ticker in tickers}
+    result = PriceDownloadResult({ticker: None for ticker in tickers})
+    permanent_failures: set[str] = set()
 
     executor = ThreadPoolExecutor(max_workers=min(PRICE_FETCH_MAX_WORKERS, len(tickers)))
-    with httpx.Client(headers=_HEADERS, timeout=PRICE_FETCH_TIMEOUT_SECONDS) as client:
+    with httpx.Client(headers=_CHART_HEADERS, timeout=PRICE_FETCH_TIMEOUT_SECONDS) as client:
         futures = {
-            executor.submit(_fetch_one, client, ticker, period1, period2): ticker
+            executor.submit(_fetch_one, client, ticker): ticker
             for ticker in tickers
         }
         try:
@@ -358,7 +366,12 @@ def download_prices(tickers: list[str]) -> dict[str, Series | None]:
                 try:
                     result[ticker] = future.result()
                 except Exception as exc:
-                    failures.append(f"{ticker}: {type(exc).__name__}")
+                    if _permanent_chart_failure(exc):
+                        permanent_failures.add(ticker)
+                    detail = type(exc).__name__
+                    if isinstance(exc, httpx.HTTPStatusError):
+                        detail = f"{detail}:{exc.response.status_code}"
+                    failures.append(f"{ticker}: {detail}")
                     result[ticker] = None
             if failures:
                 logger.warning("Yahoo chart failures (%d): %s", len(failures), ", ".join(failures[:8]))
@@ -367,4 +380,5 @@ def download_prices(tickers: list[str]) -> dict[str, Series | None]:
         finally:
             executor.shutdown(wait=False, cancel_futures=True)
 
+    result.permanent_failures = permanent_failures
     return result

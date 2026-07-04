@@ -169,7 +169,7 @@ Rate limiting is in memory and protects Yahoo-backed read endpoints:
 - `GET /api/stocks/{symbol}/news`: `120/minute`
 - `GET /api/stocks/{symbol}/financials`: `120/minute`
 
-The in-process rate limit and the price-fetch failure cooldown are per-process, so the app assumes a single instance. If you scale horizontally, move both to a shared backend such as Redis.
+The in-process rate limit and the price-fetch unresolved-symbol cooldown are per-process, so the app assumes a single instance. If you scale horizontally, move both to a shared backend such as Redis.
 
 ### Price Cache
 
@@ -181,7 +181,7 @@ The default cache TTL is 1 hour. Override it with:
 MARKETDECK_PRICE_CACHE_TTL_SECONDS=3600
 ```
 
-Tickers that Yahoo cannot resolve are held in a short in-process failure cooldown so repeated list loads do not keep retrying known failures immediately.
+Tickers that Yahoo reports as unresolved are held in a short in-process cooldown so repeated list loads do not keep retrying known permanent failures immediately. Transient chart errors are not cooled down.
 
 Admins can clear the server-side cache and failure cooldown through:
 
