@@ -57,7 +57,7 @@ def create_app() -> FastAPI:
             file_path = (static_dir / path).resolve(strict=False)
             file_path.relative_to(static_dir)
         except ValueError:
-            raise HTTPException(404, "Not found")
+            raise HTTPException(404, "Not found") from None
 
         if file_path.is_file():
             return FileResponse(file_path)

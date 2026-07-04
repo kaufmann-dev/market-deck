@@ -1,5 +1,5 @@
 """Password hashing and JWT authentication."""
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import bcrypt
 import jwt
@@ -26,7 +26,7 @@ def verify_password(password: str, password_hash: str) -> bool:
 
 
 def create_access_token(subject: str, role: str) -> str:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     payload = {
         "sub": subject,
         "role": role,
@@ -45,7 +45,7 @@ def get_current_user(request: Request, session: Session = Depends(get_session)) 
     try:
         payload = jwt.decode(token, get_settings().jwt_secret, algorithms=[JWT_ALGORITHM])
     except jwt.PyJWTError:
-        raise HTTPException(401, "Token expired")
+        raise HTTPException(401, "Token expired") from None
 
     subject = payload.get("sub")
     role = payload.get("role")

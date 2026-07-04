@@ -45,7 +45,11 @@ def seed_users(session: Session) -> None:
     )
     session.execute(
         pg_insert(User)
-        .values(email=settings.admin_email, password_hash=hash_password(settings.admin_password), role="admin")
+        .values(
+            email=settings.admin_email,
+            password_hash=hash_password(settings.admin_password),
+            role="admin",
+        )
         .on_conflict_do_nothing(index_elements=["email"])
     )
     session.commit()
