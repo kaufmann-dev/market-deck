@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "skills": {
+    "postgresql-table-design": {
+      "source": "kaufmann-dev/sveltekit-template",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/postgresql-table-design/SKILL.md",
+      "computedHash": "3170aed913a522ca10e0f94bcfbef61e4284dd7c9e6aabb5ffaed2dbfb3173b4"
+    },
+    "svelte-code-writer": {
+      "source": "kaufmann-dev/sveltekit-template",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/svelte-code-writer/SKILL.md",
+      "computedHash": "cc8fa3ac4a382aeb1cda3e6e9244abe785ab0e3364105bf45ea8bbb94f4301bf"
+    },
+    "svelte-core-bestpractices": {
+      "source": "kaufmann-dev/sveltekit-template",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/svelte-core-bestpractices/SKILL.md",
+      "computedHash": "219fb2ca4add257da041c640ab18218f470bfc67ef24d04dcb879f87aaf38a1e"
+    }
+  }
+}

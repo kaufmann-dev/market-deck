@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "svelte": {
+      "httpUrl": "https://mcp.svelte.dev/mcp"
+    },
+    "context7": {
+      "httpUrl": "https://mcp.context7.com/mcp"
+    },
+    "playwright": {
+      "command": "npx",
+      "args": ["@playwright/mcp@latest", "--browser", "chromium"]
+    }
+  }
+}
