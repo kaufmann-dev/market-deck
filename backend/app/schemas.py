@@ -59,7 +59,3 @@ class TagUpdate(BaseModel):
     bg: str
     text: str
     border: str
-
-
-class PricesRequest(BaseModel):
-    tickers: list[str]
