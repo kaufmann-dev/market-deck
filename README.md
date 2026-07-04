@@ -1,6 +1,6 @@
 # Market Deck
 
-Dashboard for ranking financial assets by price momentum — live prices, FX conversion, return heatmaps, and multi-watchlist management — powered by FastAPI, PostgreSQL, and Yahoo Finance.
+Dashboard for displaying financial asset information — live prices, FX conversion, return tables, heatmaps, and multi-watchlist management — powered by FastAPI, PostgreSQL, and Yahoo Finance.
 
 ## Navigation
 
