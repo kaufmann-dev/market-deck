@@ -11,6 +11,9 @@ SEARCH_URL = re.compile(r"https://query1\.finance\.yahoo\.com/v1/finance/search"
 SUMMARY_URL = re.compile(
     r"https://query2\.finance\.yahoo\.com/v10/finance/quoteSummary/(?P<symbol>[^?]+)"
 )
+TIMESERIES_URL = re.compile(
+    r"https://query2\.finance\.yahoo\.com/ws/fundamentals-timeseries/v1/finance/timeseries/(?P<symbol>[^?]+)"
+)
 CRUMB_URL = "https://query1.finance.yahoo.com/v1/test/getcrumb"
 COOKIE_URL = "https://fc.yahoo.com/"
 
@@ -120,28 +123,25 @@ def search_payload():
     }
 
 
+def _ts_block(type_name, points):
+    return {
+        "meta": {"symbol": ["AAPL"], "type": [type_name]},
+        type_name: [
+            {"asOfDate": date, "reportedValue": {"raw": value, "fmt": str(value)}}
+            for date, value in points
+        ],
+    }
+
+
 def financials_payload():
     return {
-        "quoteSummary": {
+        "timeseries": {
             "result": [
-                {
-                    "incomeStatementHistory": {
-                        "incomeStatementHistory": [{"endDate": {"fmt": "2025"}, "totalRevenue": {"raw": 10}}]
-                    },
-                    "incomeStatementHistoryQuarterly": {
-                        "incomeStatementHistory": [{"endDate": {"fmt": "Q1"}, "totalRevenue": {"raw": 3}}]
-                    },
-                    "balanceSheetHistory": {"balanceSheetStatements": [{"cash": {"raw": 4}}]},
-                    "balanceSheetHistoryQuarterly": {"balanceSheetStatements": [{"cash": {"raw": 5}}]},
-                    "cashflowStatementHistory": {
-                        "cashflowStatements": [{"totalCashFromOperatingActivities": {"raw": 6}}]
-                    },
-                    "cashflowStatementHistoryQuarterly": {
-                        "cashflowStatements": [{"totalCashFromOperatingActivities": {"raw": 7}}]
-                    },
-                    "earnings": {"financialsChart": {"yearly": []}},
-                    "earningsTrend": {"trend": []},
-                }
+                _ts_block("annualTotalRevenue", [("2024-12-31", 20), ("2025-12-31", 30)]),
+                _ts_block("annualNetIncome", [("2024-12-31", 5), ("2025-12-31", 8)]),
+                _ts_block("quarterlyTotalRevenue", [("2025-09-30", 9)]),
+                _ts_block("annualTotalAssets", [("2025-12-31", 100)]),
+                _ts_block("annualOperatingCashFlow", [("2025-12-31", 40)]),
             ],
             "error": None,
         }
@@ -171,18 +171,20 @@ def install_yahoo_mocks(mock, crumb_status=200, summary_status=200):
     def summary_responder(request, symbol):
         if summary_status != 200:
             return httpx.Response(summary_status, json={"quoteSummary": {"result": None, "error": {}}})
-        modules = request.url.params.get("modules", "")
-        if "incomeStatementHistory" in modules:
-            return httpx.Response(200, json=financials_payload())
         return httpx.Response(200, json=summary_payload(symbol))
 
     summary_route.side_effect = summary_responder
+
+    timeseries_route = mock.route(url__regex=TIMESERIES_URL)
+    timeseries_route.return_value = httpx.Response(200, json=financials_payload())
+
     return {
         "chart": chart_route,
         "search": search_route,
         "cookie": cookie_route,
         "crumb": crumb_route,
         "summary": summary_route,
+        "timeseries": timeseries_route,
     }
 
 
@@ -270,6 +272,39 @@ def test_overview_graceful_when_fundamentals_unavailable(
     assert body["quote"]["regularMarketPrice"] == 359
     assert body["fundamentalsAvailable"] is False
     assert body["profile"] is None
+
+
+def test_financials_from_timeseries(client, admin_headers):
+    with respx.mock(assert_all_called=False) as mock:
+        install_yahoo_mocks(mock)
+        response = client.get("/api/stocks/AAPL/financials", headers=admin_headers)
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["financialsAvailable"] is True
+
+    income = body["incomeAnnual"]
+    assert [row["endDate"] for row in income] == [
+        int(datetime(2025, 12, 31, tzinfo=UTC).timestamp()),
+        int(datetime(2024, 12, 31, tzinfo=UTC).timestamp()),
+    ]
+    assert income[0]["totalRevenue"] == 30
+    assert income[0]["netIncome"] == 8
+    # Metrics with no data are omitted rather than rendered as empty columns.
+    assert "costOfRevenue" not in income[0]
+
+    assert body["balanceAnnual"][0]["totalAssets"] == 100
+    assert body["cashflowAnnual"][0]["operatingCashFlow"] == 40
+    assert len(body["incomeQuarterly"]) == 1
+
+
+def test_financials_unavailable_when_upstream_fails(client, admin_headers):
+    with respx.mock(assert_all_called=False) as mock:
+        install_yahoo_mocks(mock, crumb_status=404)
+        response = client.get("/api/stocks/AAPL/financials", headers=admin_headers)
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["financialsAvailable"] is False
+    assert body["incomeAnnual"] == []
 
 
 def test_chart_and_technicals(client, admin_headers):

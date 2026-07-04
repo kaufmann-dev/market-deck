@@ -1,4 +1,6 @@
 """Single-stock search, overview, chart, news, and fundamentals endpoints."""
+from datetime import UTC, datetime
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 
@@ -25,16 +27,38 @@ SUMMARY_MODULES = [
     "earningsTrend",
 ]
 
-FINANCIAL_MODULES = [
-    "incomeStatementHistory",
-    "incomeStatementHistoryQuarterly",
-    "balanceSheetHistory",
-    "balanceSheetHistoryQuarterly",
-    "cashflowStatementHistory",
-    "cashflowStatementHistoryQuarterly",
-    "earnings",
-    "earningsTrend",
+# Statement line items pulled from Yahoo's fundamentals-timeseries endpoint. Each
+# base name is prefixed with "annual"/"quarterly" per period. Order here defines
+# column order in the UI (endDate is prepended). Keep each list at 7 so a table
+# shows at most 8 columns.
+INCOME_METRICS = [
+    "TotalRevenue",
+    "CostOfRevenue",
+    "GrossProfit",
+    "OperatingIncome",
+    "NetIncome",
+    "EBITDA",
+    "DilutedEPS",
 ]
+BALANCE_METRICS = [
+    "TotalAssets",
+    "TotalLiabilitiesNetMinorityInterest",
+    "StockholdersEquity",
+    "CashAndCashEquivalents",
+    "TotalDebt",
+    "CurrentAssets",
+    "CurrentLiabilities",
+]
+CASHFLOW_METRICS = [
+    "OperatingCashFlow",
+    "InvestingCashFlow",
+    "FinancingCashFlow",
+    "FreeCashFlow",
+    "CapitalExpenditure",
+    "EndCashPosition",
+    "NetIncome",
+]
+STATEMENT_METRICS = [*INCOME_METRICS, *BALANCE_METRICS, *CASHFLOW_METRICS]
 
 
 def _symbol(value: str) -> str:
@@ -124,9 +148,55 @@ def _quote_from(chart: dict | None, summary: dict | None, symbol: str) -> dict:
     }
 
 
-def _statement(summary: dict | None, module: str, key: str) -> list:
-    value = ((summary or {}).get(module) or {}).get(key) or []
-    return value if isinstance(value, list) else []
+def _date_to_unix(as_of_date: str | None) -> int | None:
+    try:
+        return int(
+            datetime.strptime(as_of_date, "%Y-%m-%d").replace(tzinfo=UTC).timestamp()
+        )
+    except (TypeError, ValueError):
+        return None
+
+
+def _metric_key(base: str) -> str:
+    # Lowercase the leading char for normal words (TotalRevenue -> totalRevenue)
+    # but leave leading acronyms intact (EBITDA stays EBITDA).
+    if len(base) >= 2 and base[1].isupper():
+        return base
+    return base[:1].lower() + base[1:]
+
+
+def _statement_rows(
+    timeseries: dict[str, list[dict]], prefix: str, metrics: list[str]
+) -> list[dict]:
+    """Build period rows for one statement from timeseries data.
+
+    Only metrics that returned data are included as columns, preserving the order
+    in ``metrics``. Rows are one per reporting period, most recent first, each
+    keyed by ``endDate`` plus the present metric keys.
+    """
+    per_metric: dict[str, dict[str, float | None]] = {}
+    present: list[str] = []
+    dates: set[str] = set()
+    for base in metrics:
+        points = timeseries.get(f"{prefix}{base}") or []
+        by_date = {
+            point["date"]: point.get("value")
+            for point in points
+            if point.get("date") is not None
+        }
+        if not by_date:
+            continue
+        present.append(base)
+        per_metric[base] = by_date
+        dates.update(by_date)
+
+    rows = []
+    for as_of_date in sorted(dates, reverse=True):
+        row: dict = {"endDate": _date_to_unix(as_of_date)}
+        for base in present:
+            row[_metric_key(base)] = per_metric[base].get(as_of_date)
+        rows.append(row)
+    return rows
 
 
 @router.get("/search")
@@ -231,8 +301,13 @@ def stock_financials(
     if isinstance(cached, dict):
         return cached
 
-    summary = yahoo.fetch_quote_summary(normalized, FINANCIAL_MODULES)
-    if not summary:
+    types = [
+        f"{prefix}{base}"
+        for prefix in ("annual", "quarterly")
+        for base in STATEMENT_METRICS
+    ]
+    timeseries = yahoo.fetch_fundamentals_timeseries(normalized, types)
+    if timeseries is None:
         return {
             "financialsAvailable": False,
             "incomeAnnual": [],
@@ -241,30 +316,16 @@ def stock_financials(
             "balanceQuarterly": [],
             "cashflowAnnual": [],
             "cashflowQuarterly": [],
-            "earnings": None,
-            "earningsTrend": None,
         }
 
     data = {
         "financialsAvailable": True,
-        "incomeAnnual": _statement(
-            summary, "incomeStatementHistory", "incomeStatementHistory"
-        ),
-        "incomeQuarterly": _statement(
-            summary, "incomeStatementHistoryQuarterly", "incomeStatementHistory"
-        ),
-        "balanceAnnual": _statement(summary, "balanceSheetHistory", "balanceSheetStatements"),
-        "balanceQuarterly": _statement(
-            summary, "balanceSheetHistoryQuarterly", "balanceSheetStatements"
-        ),
-        "cashflowAnnual": _statement(
-            summary, "cashflowStatementHistory", "cashflowStatements"
-        ),
-        "cashflowQuarterly": _statement(
-            summary, "cashflowStatementHistoryQuarterly", "cashflowStatements"
-        ),
-        "earnings": summary.get("earnings"),
-        "earningsTrend": summary.get("earningsTrend"),
+        "incomeAnnual": _statement_rows(timeseries, "annual", INCOME_METRICS),
+        "incomeQuarterly": _statement_rows(timeseries, "quarterly", INCOME_METRICS),
+        "balanceAnnual": _statement_rows(timeseries, "annual", BALANCE_METRICS),
+        "balanceQuarterly": _statement_rows(timeseries, "quarterly", BALANCE_METRICS),
+        "cashflowAnnual": _statement_rows(timeseries, "annual", CASHFLOW_METRICS),
+        "cashflowQuarterly": _statement_rows(timeseries, "quarterly", CASHFLOW_METRICS),
     }
     stock_cache.set_json(session, key, data)
     return data

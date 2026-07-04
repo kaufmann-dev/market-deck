@@ -21,6 +21,9 @@ PRICE_HISTORY_DAYS = 430
 YAHOO_CHART_BASE_URL = "https://query1.finance.yahoo.com/v8/finance/chart"
 YAHOO_SEARCH_URL = "https://query1.finance.yahoo.com/v1/finance/search"
 YAHOO_QUOTE_SUMMARY_URL = "https://query2.finance.yahoo.com/v10/finance/quoteSummary"
+YAHOO_FUNDAMENTALS_TIMESERIES_URL = (
+    "https://query2.finance.yahoo.com/ws/fundamentals-timeseries/v1/finance/timeseries"
+)
 YAHOO_CRUMB_URL = "https://query1.finance.yahoo.com/v1/test/getcrumb"
 YAHOO_COOKIE_URL = "https://fc.yahoo.com/"
 

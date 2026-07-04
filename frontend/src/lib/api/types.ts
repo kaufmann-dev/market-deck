@@ -170,6 +170,4 @@ export interface FinancialsResponse {
   balanceQuarterly: Record<string, unknown>[];
   cashflowAnnual: Record<string, unknown>[];
   cashflowQuarterly: Record<string, unknown>[];
-  earnings?: Record<string, unknown> | null;
-  earningsTrend?: Record<string, unknown> | null;
 }
