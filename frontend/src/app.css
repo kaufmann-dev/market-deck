@@ -2099,6 +2099,7 @@ tr:hover td {
 
   #editor-panel {
     width: 100%;
+    border-left: none;
   }
 
   .modal-box {
