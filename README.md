@@ -1,6 +1,12 @@
 # Market Deck
 
-Dashboard for displaying financial asset information — live prices, FX conversion, return tables, heatmaps, and multi-watchlist management — powered by FastAPI, PostgreSQL, and Yahoo Finance.
+Dashboard for displaying financial asset information — live prices, FX conversion, return tables, heatmaps, and multi-watchlist management — powered by a FastAPI + SQLAlchemy backend, a Svelte 5 frontend, PostgreSQL, and Yahoo Finance.
+
+## Architecture
+
+- **Backend** (`backend/`): packaged FastAPI app on SQLAlchemy 2 with Alembic migrations. Layered into API routers, services, and ORM models. Computes all FX conversion and return metrics server-side.
+- **Frontend** (`frontend/`): Svelte 5 + Vite + TypeScript single-page app, built to `frontend/dist/` and served by the backend (with SPA fallback).
+- **Deployment**: a single container built by Nixpacks (Python + Node), fronted by Coolify, backed by a separate Coolify PostgreSQL resource.
 
 ## Navigation
 
@@ -18,12 +24,13 @@ Dashboard for displaying financial asset information — live prices, FX convers
 
 - Admin account with full access to watchlists, tickers, per-list tags, settings, cache clearing, and password changes.
 - Demo account with read-only access.
-- PostgreSQL schema creation and seed data on first startup.
+- Alembic-managed PostgreSQL schema, migrated automatically on startup; seed data on first startup.
 - JWT login/session restore.
 - Server-side authorization for all write endpoints.
-- Rate limits on login and price-fetching endpoints.
+- Server-side metrics: FX conversion, lookback returns, and monthly heatmap data computed on the backend.
+- In-memory rate limit on the metrics endpoint.
 - Coolify/Nixpacks deployment files:
-  - `.python-version`
+  - `.python-version`, `.nvmrc`
   - `requirements.txt`
   - `nixpacks.toml`
 
@@ -42,11 +49,22 @@ This app is designed for a Coolify application resource plus a separate Coolify 
 ```text
 Base Directory: /
 Port Exposes: 8000
-Start Command: python server.py
 Health Check Path: /api/auth/demo-info
 ```
 
-`nixpacks.toml` already defines the start command, but setting it in Coolify is also fine. Coolify normally provides `PORT` from `Port Exposes`; the server falls back to `8000` if `PORT` is absent.
+`nixpacks.toml` defines the whole build and start:
+
+- **Build**: installs `requirements.txt` (Python) and runs `cd frontend && npm ci && npm run build` (Node, pinned to 20 via `.nvmrc`).
+- **Start**: `cd backend && python -m app.migrate && uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}` — runs pending Alembic migrations, then serves the API and the built `frontend/dist/`.
+
+Leave the Coolify Start Command blank so it uses `nixpacks.toml`. Coolify normally provides `PORT` from `Port Exposes`; the server falls back to `8000` if `PORT` is absent.
+
+If the Nixpacks polyglot detection ever fails to install the frontend (e.g. Node not provisioned), add an explicit install phase to `nixpacks.toml`:
+
+```toml
+[phases.install]
+cmds = ["pip install -r requirements.txt", "cd frontend && npm ci"]
+```
 
 Use the PostgreSQL internal URL for `DATABASE_URL`, for example:
 
@@ -73,6 +91,7 @@ Optional:
 MARKETDECK_DB_CONNECT_RETRIES=30
 MARKETDECK_DB_CONNECT_RETRY_DELAY=2
 MARKETDECK_PRICE_CACHE_TTL_SECONDS=3600
+MARKETDECK_STATIC_DIR=frontend/dist
 PORT=8000
 ```
 
@@ -93,7 +112,7 @@ openssl rand -hex 32
 
 ## First Login
 
-On first successful startup, the app creates tables, seeds default dashboard data, inserts the demo user, and inserts the admin user.
+On first successful startup, the app applies migrations to create the schema, seeds default dashboard data, and inserts the demo and admin users.
 
 Checklist:
 
@@ -108,11 +127,21 @@ Changing `MARKETDECK_ADMIN_PASSWORD` later does not overwrite an existing databa
 
 ## Operational Notes
 
+### Migrations
+
+The schema is managed by Alembic. On startup, `app.migrate` runs before the server binds:
+
+- An Alembic-managed database is upgraded to the latest revision.
+- A **legacy database from before this refactor** (a `watchlists` table but no `alembic_version`) is stamped at the baseline revision `0001` — which matches that schema exactly — and then upgraded. Existing users, watchlists, and tickers are preserved.
+- A fresh database has all migrations applied.
+
+The `nixpacks.toml` start command also runs migrations, so they are applied automatically on every deploy.
+
 ### Database Seeding
 
-Dashboard seed data is first-deploy only. If the `watchlists` table already has rows, the app skips watchlist/ticker/settings seeding. Startup migrations still normalize existing ticker tags and create per-list tag catalogs when needed.
+Dashboard seed data is first-deploy only. If the `watchlists` table already has rows, the app skips watchlist/ticker/tag/settings seeding.
 
-Admin users are inserted with `ON CONFLICT DO NOTHING`, so redeploys do not reset the admin password. Demo user seeding is also idempotent.
+Admin and demo users are inserted with `ON CONFLICT DO NOTHING`, so redeploys do not reset the admin password.
 
 ### Startup Retries
 
@@ -126,11 +155,11 @@ Demo users can browse data and fetch prices, but write endpoints return `403`.
 
 ### Rate Limiting
 
-Rate limiting is in memory and only protects the Yahoo Finance proxy endpoint:
+Rate limiting is in memory and only protects the metrics endpoint (the one that fetches from Yahoo Finance):
 
-- `POST /api/prices`: `120/minute`
+- `GET /api/lists/{slug}/metrics`: `120/minute`
 
-If you scale horizontally, move rate-limit storage to a shared backend such as Redis.
+The in-process rate limit and the price-fetch failure cooldown are per-process, so the app assumes a single instance. If you scale horizontally, move both to a shared backend such as Redis.
 
 ### Price Cache
 
@@ -190,25 +219,40 @@ Check that the credentials match the database user. If the admin user already ex
 
 ## Local Development
 
-Local development requires PostgreSQL.
+Local development requires PostgreSQL and Node.js 20+.
+
+**Backend** (serves the API, and `frontend/dist/` once built):
 
 ```bash
 python3 -m venv .venv
 . .venv/bin/activate
-pip install -r requirements.txt
+pip install -r requirements-dev.txt   # runtime deps + pytest, ruff, respx, testcontainers
 
 export DATABASE_URL="postgresql://user:password@localhost:5432/marketdeck"
 export MARKETDECK_JWT_SECRET="$(openssl rand -hex 32)"
 export MARKETDECK_ADMIN_EMAIL="admin@example.com"
 export MARKETDECK_ADMIN_PASSWORD="change-me"
 
-python server.py
+cd backend
+python -m app.migrate                 # optional; the server also migrates on startup
+uvicorn app.main:app --reload
 ```
 
-Open:
+**Frontend** (Vite dev server on `http://localhost:5173`, proxying `/api` to the backend):
 
-```text
-http://localhost:8000
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+During development, browse the Vite dev server for hot-reload. For a production-like run, `npm run build` and open the backend directly at `http://localhost:8000`.
+
+### Checks
+
+```bash
+cd backend && ruff check app tests && pytest   # pytest uses a Postgres testcontainer, or set TEST_DATABASE_URL
+cd frontend && npm run check && npm run build   # svelte-check + production build
 ```
 
 ## API Summary
@@ -224,7 +268,7 @@ Authenticated admin or demo:
 - `GET /api/auth/me`
 - `GET /api/init`
 - `GET /api/settings`
-- `POST /api/prices`
+- `GET /api/lists/{slug}/metrics` — server-computed returns/heatmap; optional `?base=CUR` override
 
 Admin only:
 
