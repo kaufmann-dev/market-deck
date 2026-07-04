@@ -11,7 +11,7 @@
   <link
     href="https://fonts.googleapis.com/css2?family=Google+Sans:ital,opsz,wght@0,17..18,400..700;1,17..18,400..700&family=Google+Sans+Code:wght@400..700&display=swap"
     rel="stylesheet">
-  <link rel="stylesheet" href="static/styles.css?v=3" />
+  <link rel="stylesheet" href="static/styles.css?v=4" />
 </head>
 
 <body class="auth-pending">
@@ -81,13 +81,8 @@
       <div class="home-grid" id="home-grid"></div>
 
       <div class="tag-section">
-        <div class="home-section-title">Tag Colors</div>
+        <div class="home-section-title">List Tags</div>
         <div id="tag-colors-editor"></div>
-        <div class="tag-add-row">
-          <input id="tag-new-name" type="text" placeholder="TAG NAME" oninput="this.value = this.value.toUpperCase()" />
-          <input id="tag-new-color" type="color" value="#68d391" />
-          <button onclick="addTagColor()">+ Add</button>
-        </div>
       </div>
     </div>
 
@@ -116,10 +111,10 @@
             <label>Top N Assets to Hold</label>
             <div class="btn-group" id="tn-btns"></div>
           </div>
-          <div class="cg" id="type-filter-cg" style="display:none;">
-            <label>Filter by Type</label>
+          <div class="cg" id="tag-filter-cg" style="display:none;">
+            <label>Filter by Tag</label>
             <div class="btn-group">
-              <select id="type-filter-select" onchange="setTypeFilter(this.value)">
+              <select id="tag-filter-select" onchange="setTagFilter(this.value)">
               </select>
             </div>
           </div>
@@ -146,7 +141,7 @@
                   <th>Rank</th>
                   <th>Name</th>
                   <th>Ticker</th>
-                  <th id="r-th-type">Type</th>
+                  <th id="r-th-tag">Tag</th>
                   <th id="ret-hdr">Return</th>
                   <th>Current Price</th>
                   <th>Signal</th>
@@ -230,7 +225,7 @@
           <div style="display:flex;gap:8px;flex-wrap:wrap;">
             <input id="ed-add-symbol" type="text" placeholder="AAPL" style="width:90px;" />
             <input id="ed-add-name" type="text" placeholder="Apple Inc." style="flex:1;min-width:100px;" />
-            <input id="ed-add-tag" type="text" placeholder="Tag" style="width:80px;" />
+            <select id="ed-add-tag" style="width:120px;"></select>
             <input id="ed-add-cur" type="text" placeholder="USD" style="width:60px;" maxlength="3" />
             <button onclick="addTicker()" class="ed-btn-save" style="white-space:nowrap;">+ Add</button>
           </div>
@@ -268,9 +263,9 @@
             <input id="le-category" type="text" placeholder="ETFS" oninput="this.value = this.value.toUpperCase()" />
           </div>
           <div class="modal-field modal-field-toggle">
-            <label>Show Type Column</label>
+            <label>Show Tag Column</label>
             <label class="toggle-switch">
-              <input id="le-show-type" type="checkbox" />
+              <input id="le-show-tag" type="checkbox" />
               <span class="toggle-track"></span>
             </label>
           </div>
@@ -289,7 +284,7 @@
       </div>
     </div>
   </div>
-  <script src="static/app.js?v=4"></script>
+  <script src="static/app.js?v=5"></script>
 </body>
 
 </html>

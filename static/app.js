@@ -1,5 +1,4 @@
 let LISTS = {};
-let TAG_COLORS = {};
 const AUTH_TOKEN_KEY = "marketdeck_token";
 
 // ═══════════════════════════════════════════
@@ -19,7 +18,7 @@ let state = {
   pendingControllers: {}, // { listId: AbortController }
   dataEpoch: 0,
   currentView: "home",   // "home" or "list"
-  typeFilter: "All",
+  tagFilter: "All",
   currentUser: null,
 };
 
@@ -124,7 +123,7 @@ function clearSession() {
   state.currentUser = null;
   state.activeList = null;
   state.currentView = "home";
-  state.typeFilter = "All";
+  state.tagFilter = "All";
   resetDataCaches();
 }
 
@@ -215,12 +214,34 @@ function categoryKey(category) {
   return normalizeCategoryValue(category).toLocaleLowerCase();
 }
 
-function normalizeTagColors(tagColors) {
-  const normalized = {};
-  for (const [tag, colors] of Object.entries(tagColors || {})) {
-    normalized[normalizeTagValue(tag)] = colors;
-  }
-  return normalized;
+function normalizeListTags(tags) {
+  return (tags || []).map((tag, index) => ({
+    tag: normalizeTagValue(tag.tag),
+    bg: tag.bg,
+    text: tag.text,
+    border: tag.border,
+    sortOrder: tag.sortOrder ?? index,
+  })).filter(tag => tag.tag);
+}
+
+function getListTags(list) {
+  return normalizeListTags(list?.tags || []).sort((a, b) => {
+    const order = (a.sortOrder ?? 0) - (b.sortOrder ?? 0);
+    return order || a.tag.localeCompare(b.tag);
+  });
+}
+
+function getTagOptionsHtml(list, selectedTag = "") {
+  const selected = normalizeTagValue(selectedTag);
+  return getListTags(list).map(tag => {
+    const isSelected = tag.tag === selected ? " selected" : "";
+    return `<option value="${escapeAttr(tag.tag)}"${isSelected}>${escapeHtml(tag.tag)}</option>`;
+  }).join("");
+}
+
+function syncListTags(slug, tags) {
+  if (!LISTS[slug]) return;
+  LISTS[slug].tags = normalizeListTags(tags);
 }
 
 // ═══════════════════════════════════════════
@@ -289,7 +310,7 @@ function switchList(id) {
   document.getElementById("view-home").style.display = "none";
   document.getElementById("view-list").style.display = "block";
 
-  state.typeFilter = "All"; // Reset filter on list switch
+  state.tagFilter = "All";
 
   buildSidebar();
 
@@ -375,62 +396,105 @@ function renderTagColorsEditor() {
     return;
   }
   let html = `<div class="tag-color-grid">`;
-  for (const [tag, colors] of Object.entries(TAG_COLORS)) {
-    const hex = hexFromTagColors(colors);
-    const preview = autoGenerateTagColors(hex);
-    const safeTag = escapeHtml(tag);
-    const safeTagJs = escapeJsString(tag);
-    html += `<div class="tag-color-row">
-      <span class="tag-color-preview" style="background:${escapeAttr(preview.bg)};color:${escapeAttr(preview.text)};border:1px solid ${escapeAttr(preview.border)}">${safeTag}</span>
-      <input type="color" class="tag-color-input" value="${escapeAttr(hex)}" data-tag="${escapeAttr(tag)}" onchange="updateTagColor('${safeTagJs}', this.value)" />
-      <button class="tag-color-del" onclick="deleteTagColor('${safeTagJs}')" title="Delete">✕</button>
-    </div>`;
+  for (const [slug, list] of Object.entries(LISTS)) {
+    const safeSlug = escapeJsString(slug);
+    const tags = getListTags(list);
+    html += `<section class="tag-list-panel">
+      <div class="tag-list-header">
+        <div>
+          <div class="tag-list-title">${escapeHtml(list.name)}</div>
+          <div class="tag-list-meta">${tags.length} ${tags.length === 1 ? "tag" : "tags"}</div>
+        </div>
+      </div>
+      <div class="tag-chip-grid">`;
+    if (tags.length === 0) {
+      html += `<div class="tag-empty">No tags yet</div>`;
+    } else {
+      tags.forEach(tagInfo => {
+        const hex = hexFromTagColors(tagInfo);
+        const preview = autoGenerateTagColors(hex);
+        const safeTag = escapeHtml(tagInfo.tag);
+        const safeTagJs = escapeJsString(tagInfo.tag);
+        html += `<div class="tag-color-row">
+          <span class="tag-color-preview" style="background:${escapeAttr(preview.bg)};color:${escapeAttr(preview.text)};border:1px solid ${escapeAttr(preview.border)}">${safeTag}</span>
+          <input type="color" class="tag-color-input" value="${escapeAttr(hex)}" onchange="updateListTagColor('${safeSlug}', '${safeTagJs}', this.value)" aria-label="Color for ${safeTag}" />
+          <button class="tag-color-del" onclick="deleteListTag('${safeSlug}', '${safeTagJs}')" title="Delete ${safeTag}" aria-label="Delete ${safeTag}">✕</button>
+        </div>`;
+      });
+    }
+    html += `</div>
+      <form class="tag-add-row" onsubmit="event.preventDefault();addListTag('${safeSlug}', this)">
+        <input name="tag" type="text" placeholder="TAG NAME" oninput="this.value = this.value.toUpperCase()" />
+        <input name="color" type="color" value="#68d391" aria-label="New tag color" />
+        <button type="submit">+ Add</button>
+      </form>
+    </section>`;
   }
   html += `</div>`;
   container.innerHTML = html;
 }
 
-async function updateTagColor(tag, hex) {
+async function updateListTagColor(slug, tag, hex) {
   if (!isAdmin()) return;
   const normalizedTag = normalizeTagValue(tag);
   const colors = autoGenerateTagColors(hex);
   try {
-    await apiFetch(`/api/tag-colors/${encodeURIComponent(normalizedTag)}`, {
+    await apiFetch(`/api/lists/${encodeURIComponent(slug)}/tags/${encodeURIComponent(normalizedTag)}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(colors)
     });
-    TAG_COLORS[normalizedTag] = colors;
+    const list = LISTS[slug];
+    const tagInfo = getListTags(list).find(item => item.tag === normalizedTag);
+    if (tagInfo) Object.assign(tagInfo, colors);
+    if (tagInfo && list?.tags) {
+      const idx = list.tags.findIndex(item => normalizeTagValue(item.tag) === normalizedTag);
+      if (idx >= 0) Object.assign(list.tags[idx], colors);
+    }
     renderTagColorsEditor();
+    if (state.activeList === slug) render();
   } catch (e) { alert("Error: " + e.message); }
 }
 
-async function deleteTagColor(tag) {
+async function deleteListTag(slug, tag) {
   if (!isAdmin()) return;
   const normalizedTag = normalizeTagValue(tag);
-  if (!confirm(`Remove color for "${normalizedTag}"?`)) return;
+  if (!confirm(`Delete tag "${normalizedTag}" from this list?`)) return;
   try {
-    await apiFetch(`/api/tag-colors/${encodeURIComponent(normalizedTag)}`, { method: "DELETE" });
-    delete TAG_COLORS[normalizedTag];
+    await apiFetch(`/api/lists/${encodeURIComponent(slug)}/tags/${encodeURIComponent(normalizedTag)}`, { method: "DELETE" });
+    LISTS[slug].tags = getListTags(LISTS[slug]).filter(item => item.tag !== normalizedTag);
     renderTagColorsEditor();
+    if (state.activeList === slug) {
+      buildControls();
+      renderEditorTickers();
+      render();
+    }
   } catch (e) { alert("Error: " + e.message); }
 }
 
-async function addTagColor() {
+async function addListTag(slug, form) {
   if (!isAdmin()) return;
-  const name = normalizeTagValue(document.getElementById("tag-new-name").value);
-  const hex = document.getElementById("tag-new-color").value;
+  const name = normalizeTagValue(form.elements.tag.value);
+  const hex = form.elements.color.value;
   if (!name) return alert("Tag name is required.");
   const colors = autoGenerateTagColors(hex);
   try {
-    await apiFetch(`/api/tag-colors/${encodeURIComponent(name)}`, {
-      method: "PUT",
+    const data = await apiFetchJson(`/api/lists/${encodeURIComponent(slug)}/tags`, {
+      method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(colors)
+      body: JSON.stringify({ tag: name, ...colors })
     });
-    TAG_COLORS[name] = colors;
-    document.getElementById("tag-new-name").value = "";
+    const list = LISTS[slug];
+    const nextOrder = Math.max(-1, ...getListTags(list).map(item => item.sortOrder ?? 0)) + 1;
+    list.tags = [...getListTags(list), { tag: data.tag || name, ...colors, sortOrder: nextOrder }];
+    form.reset();
+    form.elements.color.value = "#68d391";
     renderTagColorsEditor();
+    if (state.activeList === slug) {
+      buildControls();
+      renderEditorTickers();
+      render();
+    }
   } catch (e) { alert("Error: " + e.message); }
 }
 
@@ -447,7 +511,7 @@ function openListEditModal(slug) {
   document.getElementById("le-name").value = list.name;
   document.getElementById("le-short").value = list.shortName;
   document.getElementById("le-category").value = list.category;
-  document.getElementById("le-show-type").checked = list.showType !== false;
+  document.getElementById("le-show-tag").checked = list.showTag !== false;
   document.getElementById("le-desc").value = list.description;
   document.querySelector("#list-edit-modal .btn-red").style.display = "";
   document.getElementById("list-edit-modal").style.display = "block";
@@ -465,7 +529,7 @@ function openCreateListModal() {
   document.getElementById("le-name").value = "";
   document.getElementById("le-short").value = "";
   document.getElementById("le-category").value = "";
-  document.getElementById("le-show-type").checked = true;
+  document.getElementById("le-show-tag").checked = true;
   document.getElementById("le-desc").value = "";
   // Hide delete button for new lists
   document.querySelector("#list-edit-modal .btn-red").style.display = "none";
@@ -477,7 +541,7 @@ async function saveListFromModal() {
   const name = document.getElementById("le-name").value.trim();
   const short_name = document.getElementById("le-short").value.trim();
   const category = normalizeCategoryValue(document.getElementById("le-category").value);
-  const show_type = document.getElementById("le-show-type").checked;
+  const show_tag = document.getElementById("le-show-tag").checked;
   const description = document.getElementById("le-desc").value.trim();
 
   if (!name || !short_name) return alert("Name and Short Name are required.");
@@ -490,7 +554,7 @@ async function saveListFromModal() {
       await apiFetch("/api/lists", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ slug, name, short_name, category, description, tag: "", currency: GLOBAL_BASE_CURRENCY, show_type })
+        body: JSON.stringify({ slug, name, short_name, category, description, currency: GLOBAL_BASE_CURRENCY, show_tag })
       });
       closeListEditModal();
       await refreshApp();
@@ -501,7 +565,7 @@ async function saveListFromModal() {
       await apiFetch(`/api/lists/${_editingListSlug}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, short_name, category, description, tag: LISTS[_editingListSlug]?.tag || "", show_type })
+        body: JSON.stringify({ name, short_name, category, description, show_tag })
       });
       closeListEditModal();
       await refreshApp();
@@ -542,8 +606,8 @@ function currencySymbol(c) {
   return formatter.format(0).replace(/\d/g, '').trim();
 }
 
-function getTagStyle(tag) {
-  const c = TAG_COLORS[normalizeTagValue(tag)];
+function getTagStyle(tag, list = LISTS[state.activeList]) {
+  const c = getListTags(list).find(item => item.tag === normalizeTagValue(tag));
   if (c) return `background:${c.bg};color:${c.text};border:1px solid ${c.border}`;
 
   // Hardcoded fallback for "Other" or any unknown tag
@@ -760,24 +824,23 @@ function buildControls() {
     tn.appendChild(b);
   });
 
-  const typeCg = document.getElementById("type-filter-cg");
-  const typeSelect = document.getElementById("type-filter-select");
+  const tagCg = document.getElementById("tag-filter-cg");
+  const tagSelect = document.getElementById("tag-filter-select");
   const list = LISTS[state.activeList];
-  if (list && list.showType !== false) {
-    typeCg.style.display = "";
+  if (list && list.showTag !== false) {
+    tagCg.style.display = "";
 
-    // Get unique tags
     const tags = new Set(list.items.map(item => item.tag).filter(t => t));
     const sortedTags = Array.from(tags).sort();
 
-    let optionsHtml = `<option value="All">All Types</option>\n`;
+    let optionsHtml = `<option value="All">All Tags</option>\n`;
     sortedTags.forEach(tag => {
       optionsHtml += `<option value="${escapeAttr(tag)}">${escapeHtml(tag)}</option>\n`;
     });
-    typeSelect.innerHTML = optionsHtml;
-    typeSelect.value = state.typeFilter;
+    tagSelect.innerHTML = optionsHtml;
+    tagSelect.value = state.tagFilter;
   } else {
-    typeCg.style.display = "none";
+    tagCg.style.display = "none";
   }
 }
 
@@ -789,8 +852,8 @@ function setView(v) {
   document.getElementById("tab-h").className = v === "h" ? "a-purple" : "";
 }
 
-function setTypeFilter(val) {
-  state.typeFilter = val;
+function setTagFilter(val) {
+  state.tagFilter = val;
   render();
 }
 
@@ -874,9 +937,8 @@ function render() {
   const sym = currencySymbol(GLOBAL_BASE_CURRENCY);
   let scored = getScored();
 
-  // Apply type filter
-  if (state.typeFilter !== "All") {
-    scored = scored.filter(s => s.tag === state.typeFilter);
+  if (state.tagFilter !== "All") {
+    scored = scored.filter(s => s.tag === state.tagFilter);
   }
 
   const ranked = scored.filter(s => s.score !== null).sort((a, b) => b.score - a.score).map((s, i) => ({ ...s, rank: i + 1 }));
@@ -903,9 +965,8 @@ function render() {
     </div>`);
   hEl.innerHTML = holdingsHtml.join("");
 
-  // Hide/Show 'Type' column header
-  const thType = document.getElementById("r-th-type");
-  if (thType) thType.style.display = list.showType === false ? "none" : "";
+  const thTag = document.getElementById("r-th-tag");
+  if (thTag) thTag.style.display = list.showTag === false ? "none" : "";
 
   document.getElementById("ret-hdr").textContent = state.lb + "M Return";
 
@@ -919,12 +980,12 @@ function render() {
     const barCol = s.score !== null && s.score >= 0 ? "#68d391" : "#fc8181";
     const priceStr = s.currentPrice !== null && s.currentPrice !== undefined ? sym + s.currentPrice.toFixed(2) : "—";
     const baseDateStr = s.baseDate ? s.baseDate.toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "";
-    const typeCellStyle = list.showType === false ? 'style="display:none"' : "";
+    const tagCellStyle = list.showTag === false ? 'style="display:none"' : "";
     return `<tr style="background:${rowBg}">
       <td><span class="rb ${bCls}">${s.rank}</span></td>
       <td><div style="display:flex;align-items:center;gap:8px"><span>${escapeHtml(s.name)}</span></div></td>
       <td><span class="ticker">${escapeHtml(s.ticker)}</span></td>
-      <td ${typeCellStyle}><span class="tag" style="${escapeAttr(getTagStyle(s.tag))}">${escapeHtml(s.tag)}</span></td>
+      <td ${tagCellStyle}><span class="tag" style="${escapeAttr(getTagStyle(s.tag, list))}">${escapeHtml(s.tag)}</span></td>
       <td>
         <div class="bar-wrap">
           <div class="bar-track"><div class="bar-fill" style="width:${barPct}%;background:${barCol}"></div></div>
@@ -1008,6 +1069,18 @@ function renderEditorTickers() {
   const list = LISTS[slug];
   const container = document.getElementById("ed-tickers");
   container.innerHTML = "";
+  const tagOptions = getTagOptionsHtml(list);
+  const hasTags = getListTags(list).length > 0;
+  const addTagSelect = document.getElementById("ed-add-tag");
+  addTagSelect.innerHTML = tagOptions;
+  addTagSelect.disabled = !hasTags;
+  const addBtn = document.querySelector(".ed-add-ticker-box .ed-btn-save");
+  if (addBtn) addBtn.disabled = !hasTags;
+
+  if (!hasTags) {
+    container.innerHTML = `<div class="editor-empty">Add at least one list tag before adding tickers.</div>`;
+    return;
+  }
 
   list.items.forEach((t, i) => {
     const row = document.createElement("div");
@@ -1016,7 +1089,7 @@ function renderEditorTickers() {
       <span style="color:#4a5568;font-size:10px;width:24px;">${i + 1}</span>
       <input class="ed-sym" value="${escapeAttr(t.ticker)}" data-id="${t.id}" data-field="symbol" />
       <input class="ed-name" value="${escapeAttr(t.name)}" data-id="${t.id}" data-field="name" />
-      <input class="ed-tag" value="${escapeAttr(t.tag)}" data-id="${t.id}" data-field="tag" />
+      <select class="ed-tag" data-id="${t.id}" data-field="tag">${getTagOptionsHtml(list, t.tag)}</select>
       <input class="ed-cur" value="${escapeAttr(t.currency)}" data-id="${t.id}" data-field="currency" maxlength="3" />
       <button class="ed-btn-save" onclick="saveTicker(${t.id}, this)">Save</button>
       <button class="ed-btn-del" onclick="deleteTicker(${t.id})">✕</button>
@@ -1064,7 +1137,10 @@ async function loadLists() {
   try {
     const data = await apiFetchJson("/api/init");
     LISTS = data.lists;
-    TAG_COLORS = normalizeTagColors(data.tagColors);
+    for (const list of Object.values(LISTS)) {
+      list.tags = normalizeListTags(list.tags);
+      list.items = (list.items || []).map(item => ({ ...item, tag: normalizeTagValue(item.tag) }));
+    }
     return data.settings;
   } catch (e) {
     console.error("Failed to load lists:", e);
@@ -1099,7 +1175,7 @@ async function saveTicker(id, btn) {
   if (!isAdmin()) return;
   const row = btn.closest(".ed-ticker-row");
   const body = {};
-  row.querySelectorAll("input[data-id]").forEach(inp => {
+  row.querySelectorAll("input[data-id], select[data-id]").forEach(inp => {
     body[inp.dataset.field] = inp.value;
   });
   try {
@@ -1143,9 +1219,10 @@ async function addTicker() {
   const slug = state.activeList;
   const symbol = document.getElementById("ed-add-symbol").value.trim();
   const name = document.getElementById("ed-add-name").value.trim();
-  const tag = document.getElementById("ed-add-tag").value.trim();
+  const tag = normalizeTagValue(document.getElementById("ed-add-tag").value);
   const currency = document.getElementById("ed-add-cur").value.trim().toUpperCase() || "USD";
   if (!symbol || !name) return alert("Symbol and Name are required.");
+  if (!tag) return alert("Choose a tag before adding a ticker.");
   try {
     const data = await apiFetchJson(`/api/lists/${slug}/tickers`, {
       method: "POST",
@@ -1155,7 +1232,7 @@ async function addTicker() {
     LISTS[slug].items.push({ id: data.id, ticker: symbol, name, tag, currency });
     document.getElementById("ed-add-symbol").value = "";
     document.getElementById("ed-add-name").value = "";
-    document.getElementById("ed-add-tag").value = "";
+    document.getElementById("ed-add-tag").selectedIndex = 0;
     document.getElementById("ed-add-cur").value = "";
     delete state.cache[slug];
     renderEditorTickers();
