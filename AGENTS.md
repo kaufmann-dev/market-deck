@@ -35,12 +35,12 @@ Missing any causes immediate `SystemExit(1)`.
 
 ## Frontend
 - Plain CSS/JS. No bundler, no framework.
-- `index.html` references `static/styles.css?v=2` and `static/app.js?v=2`. Bump the `v=` query param when deploying static asset changes to avoid stale browser caches.
+- `index.html` references `static/styles.css?v=3` and `static/app.js?v=4`. Bump the `v=` query param when deploying static asset changes to avoid stale browser caches.
 
 ## API / backend quirks
 - In-memory rate limiting (`slowapi`) protects `/api/prices`.
 - Price data is cached in PostgreSQL per account and ticker.
-- Price fetching relies on `yfinance`. Calls can be slow or fail; the backend retries per-ticker on failure.
+- Price fetching uses parallel Yahoo Finance chart JSON requests. Failed tickers are held in a short in-process cooldown.
 
 ## Deployment
 - `nixpacks.toml` sets start command: `python server.py`.
