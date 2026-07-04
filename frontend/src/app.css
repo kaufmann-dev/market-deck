@@ -2409,8 +2409,12 @@ tr.hm-row {
   border: 1px solid var(--border-strong);
   background: rgba(0, 0, 0, 0.96);
   backdrop-filter: var(--blur-glass);
-  max-height: 360px;
+  max-height: min(70vh, 520px);
   overflow-y: auto;
+}
+
+.search-result:last-child {
+  border-bottom: 0;
 }
 
 .search-result,
