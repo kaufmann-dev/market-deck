@@ -684,36 +684,6 @@ async function loadData(listId) {
         state.fxCache[t] = parsePoints(priceData[t]);
       });
 
-      const missingStockTickers = retryStockTickers.filter(t => !hasEnoughPoints(listCache[t]));
-      const missingFxTickers = retryFxTickers.filter(t => !hasEnoughPoints(state.fxCache[t]));
-      if (missingStockTickers.length > 0 || missingFxTickers.length > 0) {
-        const retryTickers = [...new Set([...missingStockTickers, ...missingFxTickers])];
-        const retryData = await apiFetchJson("/api/prices", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ tickers: retryTickers }),
-          signal: controller.signal
-        });
-        if (epoch !== state.dataEpoch) return;
-
-        missingStockTickers.forEach(t => {
-          const retriedPoints = parsePoints(retryData[t]);
-          if (hasEnoughPoints(retriedPoints)) {
-            listCache[t] = retriedPoints;
-            state.tickerCache[t] = clonePoints(retriedPoints);
-          } else {
-            delete state.tickerCache[t];
-          }
-        });
-
-        missingFxTickers.forEach(t => {
-          const retriedPoints = parsePoints(retryData[t]);
-          if (hasEnoughPoints(retriedPoints)) {
-            state.fxCache[t] = retriedPoints;
-          }
-        });
-      }
-
       state.cache[listId] = listCache;
     } catch (e) {
       if (e.name === "AbortError") return;
