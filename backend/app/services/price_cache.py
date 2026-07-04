@@ -101,9 +101,12 @@ def recent_failed_tickers(tickers: list[str]) -> list[str]:
 
 def record_fetch_results(price_data: dict[str, Series | None]) -> None:
     now = time.monotonic()
+    permanent_failures = getattr(price_data, "permanent_failures", None)
     with _failure_cache_lock:
         for ticker, data in price_data.items():
             if is_valid_series(data):
                 _failure_cache.pop(ticker, None)
-            else:
+            elif permanent_failures is None or ticker in permanent_failures:
                 _failure_cache[ticker] = now
+            else:
+                _failure_cache.pop(ticker, None)
