@@ -80,6 +80,14 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* The SPA mounts into #app, so it — not <body> — is the flex layout root
+   holding the sidebar and main columns. */
+#app {
+  display: flex;
+  width: 100%;
+  min-height: 100vh;
+}
+
 .auth-pending .sidebar,
 .auth-pending .main,
 .auth-pending .mobile-nav-toggle,
@@ -1794,7 +1802,8 @@ tr:hover td {
 
 /* ─── Mobile ─── */
 @media (max-width: 832px) {
-  body {
+  body,
+  #app {
     flex-direction: column;
   }
 
