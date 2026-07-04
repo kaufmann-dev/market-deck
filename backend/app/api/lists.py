@@ -54,7 +54,7 @@ def create_list(
         session.commit()
     except IntegrityError:
         session.rollback()
-        raise HTTPException(400, f"Slug '{body.slug}' already exists")
+        raise HTTPException(400, f"Slug '{body.slug}' already exists") from None
     return {"id": watchlist.id, "slug": body.slug}
 
 
@@ -184,7 +184,7 @@ def create_list_tag(
         session.commit()
     except IntegrityError:
         session.rollback()
-        raise HTTPException(400, f"Tag '{normalized_tag}' already exists for this list")
+        raise HTTPException(400, f"Tag '{normalized_tag}' already exists for this list") from None
     return {"tag": normalized_tag}
 
 

@@ -6,7 +6,7 @@ see docs/bugs/slow-global-ticker-loading.md for why yfinance was dropped.
 import logging
 import math
 from concurrent.futures import ThreadPoolExecutor, wait
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from urllib.parse import quote
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -34,11 +34,11 @@ def is_valid_series(data) -> bool:
 def _chart_timezone(meta):
     timezone_name = (meta or {}).get("exchangeTimezoneName") or (meta or {}).get("timezone")
     if not timezone_name:
-        return timezone.utc
+        return UTC
     try:
         return ZoneInfo(timezone_name)
     except ZoneInfoNotFoundError:
-        return timezone.utc
+        return UTC
 
 
 def _chart_closes(indicators):
@@ -76,7 +76,7 @@ def parse_chart_payload(payload) -> Series | None:
 
     tz = _chart_timezone(result.get("meta"))
     points = []
-    for timestamp, close in zip(timestamps, closes):
+    for timestamp, close in zip(timestamps, closes, strict=False):
         if close is None:
             continue
         try:
@@ -110,7 +110,7 @@ def download_prices(tickers: list[str]) -> dict[str, Series | None]:
     if not tickers:
         return {}
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     period1 = int((now - timedelta(days=PRICE_HISTORY_DAYS)).timestamp())
     period2 = int(now.timestamp())
     result: dict[str, Series | None] = {ticker: None for ticker in tickers}

@@ -2,7 +2,7 @@
 failure cooldown so known-bad tickers are not retried immediately.
 Both layers are per-process/single-instance by design."""
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from threading import Lock
 
 from sqlalchemy import delete, select
@@ -29,7 +29,7 @@ def get_cached_prices(session: Session, account_email: str, tickers: list[str]) 
         return {}
 
     ttl = get_settings().price_cache_ttl_seconds
-    cutoff = datetime.now(timezone.utc) - timedelta(seconds=ttl)
+    cutoff = datetime.now(UTC) - timedelta(seconds=ttl)
     session.execute(delete(PriceCache).where(PriceCache.cached_at < cutoff))
     rows = session.execute(
         select(PriceCache.ticker, PriceCache.data).where(
@@ -53,7 +53,7 @@ def set_cached_prices(session: Session, account_email: str, price_data: dict[str
             account_email=account_email,
             ticker=ticker,
             data=data,
-            cached_at=datetime.now(timezone.utc),
+            cached_at=datetime.now(UTC),
         )
         session.execute(
             stmt.on_conflict_do_update(

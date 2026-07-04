@@ -63,7 +63,9 @@ def change_password(
     if not user or not verify_password(body.current_password, user.password_hash):
         raise HTTPException(400, "Current password is incorrect")
     session.execute(
-        update(User).where(User.email == current_user.email).values(password_hash=hash_password(body.new_password))
+        update(User)
+        .where(User.email == current_user.email)
+        .values(password_hash=hash_password(body.new_password))
     )
     session.commit()
     return {"ok": True}

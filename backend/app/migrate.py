@@ -8,9 +8,10 @@ Handles three database states:
 """
 import logging
 
-from alembic import command
 from alembic.config import Config
 from sqlalchemy import inspect
+
+from alembic import command
 
 from .config import BACKEND_DIR
 from .db import get_engine, wait_for_db
