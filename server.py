@@ -317,12 +317,15 @@ def _column_exists(cur, table: str, column: str) -> bool:
         """,
         (table, column),
     )
-    return cur.fetchone()[0]
+    row = cur.fetchone()
+    return row[0] if not isinstance(row, dict) else next(iter(row.values()))
 
 
 def _table_exists(cur, table: str) -> bool:
     cur.execute("SELECT to_regclass(%s)", (table,))
-    return cur.fetchone()[0] is not None
+    row = cur.fetchone()
+    value = row[0] if not isinstance(row, dict) else next(iter(row.values()))
+    return value is not None
 
 
 def _require_watchlist_tag(cur, watchlist_id: int, tag: str) -> str:
