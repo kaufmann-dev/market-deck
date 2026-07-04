@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from "svelte";
   import { Check, Plus, X } from "@lucide/svelte";
   import { apiFetch, postJson, putJson } from "../../api/client";
   import type { TickerItem } from "../../api/types";
@@ -21,16 +22,21 @@
   let savedIds = $state<Record<number, boolean>>({});
 
   $effect(() => {
-    const next: Record<number, RowDraft> = {};
-    for (const item of list?.items ?? []) {
-      next[item.id] = drafts[item.id] ?? {
-        symbol: item.ticker,
-        name: item.name,
-        tag: item.tag,
-        currency: item.currency,
-      };
-    }
-    drafts = next;
+    const items = list?.items ?? [];
+    // Track membership so drafts re-sync when rows are added (.push) or removed.
+    void items.length;
+    untrack(() => {
+      const next: Record<number, RowDraft> = {};
+      for (const item of items) {
+        next[item.id] = drafts[item.id] ?? {
+          symbol: item.ticker,
+          name: item.name,
+          tag: item.tag,
+          currency: item.currency,
+        };
+      }
+      drafts = next;
+    });
   });
 
   let addSymbol = $state("");
