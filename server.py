@@ -7,6 +7,7 @@ import time as _time
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from threading import Lock
 from typing import List, Optional
 
 import pandas as pd
@@ -58,6 +59,11 @@ def _float_env(name: str, default: float) -> float:
 DB_CONNECT_RETRIES = _int_env("MARKETDECK_DB_CONNECT_RETRIES", 30)
 DB_CONNECT_RETRY_DELAY = _float_env("MARKETDECK_DB_CONNECT_RETRY_DELAY", 2)
 PRICE_CACHE_TTL_SECONDS = _int_env("MARKETDECK_PRICE_CACHE_TTL_SECONDS", 3600)
+PRICE_FETCH_BATCH_SIZE = 25
+PRICE_FETCH_TIMEOUT_SECONDS = 8
+PRICE_FAILURE_COOLDOWN_SECONDS = 300
+_price_failure_cache = {}
+_price_failure_cache_lock = Lock()
 
 
 def _validate_required_env():
@@ -874,6 +880,36 @@ def _set_cached_prices(account_email: str, price_data):
         conn.commit()
 
 
+def _chunks(items, size):
+    for index in range(0, len(items), size):
+        yield items[index:index + size]
+
+
+def _recent_failed_tickers(tickers):
+    now = _time.monotonic()
+    recent = []
+    with _price_failure_cache_lock:
+        for ticker in tickers:
+            failed_at = _price_failure_cache.get(ticker)
+            if failed_at is None:
+                continue
+            if now - failed_at < PRICE_FAILURE_COOLDOWN_SECONDS:
+                recent.append(ticker)
+            else:
+                _price_failure_cache.pop(ticker, None)
+    return recent
+
+
+def _record_price_fetch_results(price_data):
+    now = _time.monotonic()
+    with _price_failure_cache_lock:
+        for ticker, data in price_data.items():
+            if _is_cacheable_series(data):
+                _price_failure_cache.pop(ticker, None)
+            else:
+                _price_failure_cache[ticker] = now
+
+
 def _download_prices(tickers):
     if not tickers:
         return {}
@@ -884,9 +920,38 @@ def _download_prices(tickers):
         interval="1d",
         auto_adjust=True,
         progress=False,
-        threads=False,
+        threads=True,
+        timeout=PRICE_FETCH_TIMEOUT_SECONDS,
     )
     return _parse_df(df, tickers)
+
+
+def _download_prices_resilient(tickers):
+    if not tickers:
+        return {}
+
+    try:
+        fresh = _download_prices(tickers)
+        missing = [ticker for ticker, data in fresh.items() if data is None]
+        if missing:
+            try:
+                retry_data = _download_prices(missing)
+                fresh.update(retry_data)
+            except Exception as retry_error:
+                print(f"yfinance retry error for {len(missing)} tickers: {retry_error}")
+        return {ticker: fresh.get(ticker) for ticker in tickers}
+    except Exception as exc:
+        print(f"yfinance download error for {len(tickers)} tickers: {exc}")
+
+    fresh = {}
+    for batch in _chunks(tickers, PRICE_FETCH_BATCH_SIZE):
+        try:
+            batch_data = _download_prices(batch)
+        except Exception as batch_error:
+            print(f"yfinance batch fallback error for {len(batch)} tickers: {batch_error}")
+            batch_data = {ticker: None for ticker in batch}
+        fresh.update({ticker: batch_data.get(ticker) for ticker in batch})
+    return fresh
 
 
 def _extract_close_series(df, ticker):
@@ -975,44 +1040,38 @@ def fetch_prices(
     body: PricesRequest,
     current_user: CurrentUser = Depends(get_current_user),
 ):
+    started_at = _time.monotonic()
     tickers = _unique_tickers(body.tickers)
     if not tickers:
         return {}
 
     account_email = _account_cache_key(current_user)
     result = _get_cached_prices(account_email, tickers)
-    need_fetch = [ticker for ticker in tickers if ticker not in result]
+    cache_hits = len(result)
+    uncached = [ticker for ticker in tickers if ticker not in result]
+    recent_failures = set(_recent_failed_tickers(uncached))
+    for ticker in recent_failures:
+        result[ticker] = None
+    need_fetch = [ticker for ticker in uncached if ticker not in recent_failures]
 
     if need_fetch:
-        fresh = {}
-        try:
-            fresh = _download_prices(need_fetch)
-            missing = [ticker for ticker, data in fresh.items() if data is None]
-            for ticker in missing:
-                try:
-                    fresh[ticker] = _download_prices([ticker]).get(ticker)
-                except Exception as retry_error:
-                    print(f"yfinance retry error for {ticker}: {retry_error}")
-                    fresh[ticker] = None
-
-            for ticker, data in fresh.items():
-                result[ticker] = data
-        except Exception as e:
-            print(f"yfinance download error: {e}")
-            for ticker in need_fetch:
-                try:
-                    data = _download_prices([ticker]).get(ticker)
-                except Exception as retry_error:
-                    print(f"yfinance fallback error for {ticker}: {retry_error}")
-                    data = None
-                result[ticker] = data
-                fresh[ticker] = data
+        fresh = _download_prices_resilient(need_fetch)
+        _record_price_fetch_results(fresh)
+        for ticker, data in fresh.items():
+            result[ticker] = data
         _set_cached_prices(account_email, fresh)
 
     for ticker in tickers:
         if ticker not in result:
             result[ticker] = None
 
+    elapsed = _time.monotonic() - started_at
+    print(
+        "price fetch "
+        f"requested={len(tickers)} cache_hits={cache_hits} "
+        f"recent_failures={len(recent_failures)} yahoo_fetch={len(need_fetch)} "
+        f"elapsed={elapsed:.2f}s"
+    )
     return result
 
 
@@ -1022,6 +1081,8 @@ def clear_price_cache(current_user: CurrentUser = Depends(require_admin)):
         cur.execute("DELETE FROM price_cache")
         deleted = cur.rowcount
         conn.commit()
+    with _price_failure_cache_lock:
+        _price_failure_cache.clear()
     return {"ok": True, "deleted": deleted}
 
 

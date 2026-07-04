@@ -134,7 +134,7 @@ If you scale horizontally, move rate-limit storage to a shared backend such as R
 
 ### Price Cache
 
-Yahoo Finance responses are cached in PostgreSQL per account and ticker. This means the demo account shares cached prices across devices, while admin and demo sessions do not share price-cache entries with each other.
+Yahoo Finance responses are fetched in threaded bulk requests and cached in PostgreSQL per account and ticker. This means the demo account shares cached prices across devices, while admin and demo sessions do not share price-cache entries with each other.
 
 The default cache TTL is 1 hour. Override it with:
 
@@ -142,7 +142,9 @@ The default cache TTL is 1 hour. Override it with:
 MARKETDECK_PRICE_CACHE_TTL_SECONDS=3600
 ```
 
-Admins can clear the server-side cache through:
+Tickers that Yahoo cannot resolve are held in a short in-process failure cooldown so repeated list loads do not keep retrying known failures immediately.
+
+Admins can clear the server-side cache and failure cooldown through:
 
 ```text
 DELETE /api/prices/cache
