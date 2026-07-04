@@ -2771,6 +2771,10 @@ tr.clickable-row {
     height: 320px;
   }
 
+  .chart-toolbar .btn-group {
+    width: 100%;
+  }
+
   .news-item {
     grid-template-columns: minmax(0, 1fr) auto;
   }
