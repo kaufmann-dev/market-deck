@@ -18,6 +18,18 @@ _failure_cache: dict[str, float] = {}
 _failure_cache_lock = Lock()
 
 
+def unique_symbols(symbols: list[str]) -> list[str]:
+    seen = set()
+    unique = []
+    for symbol in symbols:
+        cleaned = " ".join(str(symbol or "").split())
+        if not cleaned or cleaned in seen:
+            continue
+        seen.add(cleaned)
+        unique.append(cleaned)
+    return unique
+
+
 def account_cache_key(current_user: CurrentUser) -> str:
     if current_user.role == "demo":
         return "demo"
