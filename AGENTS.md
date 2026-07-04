@@ -35,7 +35,7 @@ Missing any causes immediate `SystemExit(1)`.
 
 ## Frontend
 - Plain CSS/JS. No bundler, no framework.
-- `index.html` references `static/styles.css?v=4` and `static/app.js?v=5`. Bump the `v=` query param when deploying static asset changes to avoid stale browser caches.
+- `index.html` references `static/styles.css?v=5` and `static/app.js?v=6`. Bump the `v=` query param when deploying static asset changes to avoid stale browser caches.
 
 ## API / backend quirks
 - In-memory rate limiting (`slowapi`) protects `/api/prices`.

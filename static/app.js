@@ -63,6 +63,16 @@ function escapeJsString(value) {
     .replace(/>/g, "\\x3E");
 }
 
+function icon(name, className = "icon") {
+  return `<i data-lucide="${escapeAttr(name)}" class="${escapeAttr(className)}" aria-hidden="true"></i>`;
+}
+
+function renderIcons() {
+  if (window.lucide?.createIcons) {
+    window.lucide.createIcons();
+  }
+}
+
 async function getErrorMessage(response) {
   const contentType = response.headers.get("content-type") || "";
   if (contentType.includes("application/json")) {
@@ -146,6 +156,7 @@ function showDashboardShell() {
   document.getElementById("session-bar").style.display = "flex";
   document.getElementById("session-label").textContent = sessionLabel();
   document.getElementById("change-password-btn").style.display = isAdmin() ? "" : "none";
+  renderIcons();
 }
 
 function sessionLabel() {
@@ -341,7 +352,7 @@ function renderHomepage() {
   let html = "";
   for (const [id, list] of Object.entries(LISTS)) {
     html += `<div class="wl-card" onclick="switchList('${escapeJsString(id)}')">
-      ${isAdmin() ? `<button class="wl-card-edit" onclick="event.stopPropagation();openListEditModal('${escapeJsString(id)}')" title="Edit list">✎</button>` : ""}
+      ${isAdmin() ? `<button class="wl-card-edit" onclick="event.stopPropagation();openListEditModal('${escapeJsString(id)}')" title="Edit list" aria-label="Edit list">${icon("pencil")}</button>` : ""}
       <div class="wl-card-name">${escapeHtml(list.name)}</div>
       <div class="wl-card-meta">
         <span class="wl-card-count">${list.items.length} tickers</span>
@@ -352,7 +363,7 @@ function renderHomepage() {
   }
   if (isAdmin()) {
     html += `<div class="wl-card-new" onclick="openCreateListModal()">
-      <div class="wl-card-new-icon">+</div>
+      <div class="wl-card-new-icon">${icon("plus")}</div>
       <div class="wl-card-new-label">Create New List</div>
     </div>`;
   }
@@ -360,6 +371,7 @@ function renderHomepage() {
 
   // Render tag colors editor
   renderTagColorsEditor();
+  renderIcons();
 }
 
 // ═══════════════════════════════════════════
@@ -412,13 +424,12 @@ function renderTagColorsEditor() {
     } else {
       tags.forEach(tagInfo => {
         const hex = hexFromTagColors(tagInfo);
-        const preview = autoGenerateTagColors(hex);
         const safeTag = escapeHtml(tagInfo.tag);
         const safeTagJs = escapeJsString(tagInfo.tag);
         html += `<div class="tag-color-row">
-          <span class="tag-color-preview" style="background:${escapeAttr(preview.bg)};color:${escapeAttr(preview.text)};border:1px solid ${escapeAttr(preview.border)}">${safeTag}</span>
           <input type="color" class="tag-color-input" value="${escapeAttr(hex)}" onchange="updateListTagColor('${safeSlug}', '${safeTagJs}', this.value)" aria-label="Color for ${safeTag}" />
-          <button class="tag-color-del" onclick="deleteListTag('${safeSlug}', '${safeTagJs}')" title="Delete ${safeTag}" aria-label="Delete ${safeTag}">✕</button>
+          <span class="tag-color-name">${safeTag}</span>
+          <button class="tag-color-del" onclick="deleteListTag('${safeSlug}', '${safeTagJs}')" title="Delete ${safeTag}" aria-label="Delete ${safeTag}">${icon("x")}</button>
         </div>`;
       });
     }
@@ -426,12 +437,13 @@ function renderTagColorsEditor() {
       <form class="tag-add-row" onsubmit="event.preventDefault();addListTag('${safeSlug}', this)">
         <input name="tag" type="text" placeholder="TAG NAME" oninput="this.value = this.value.toUpperCase()" />
         <input name="color" type="color" value="#68d391" aria-label="New tag color" />
-        <button type="submit">+ Add</button>
+        <button type="submit">${icon("plus")} Add</button>
       </form>
     </section>`;
   }
   html += `</div>`;
   container.innerHTML = html;
+  renderIcons();
 }
 
 async function updateListTagColor(slug, tag, hex) {
@@ -789,7 +801,7 @@ function finishLoad(listId) {
   sb.className = "s-ok";
   sb.querySelector(".spinner").style.display = "none";
 
-  let statusMsg = `✓ ${ok}/${list.items.length} tickers loaded`;
+  let statusMsg = `${ok}/${list.items.length} tickers loaded`;
   if (failed.length > 0) {
     statusMsg += ` · ${failed.length} failed: ${failed.map(s => s.ticker).join(", ")}`;
     sb.className = "s-load"; // yellowish hint
@@ -994,10 +1006,11 @@ function render() {
         ${s.basePrice ? `<div class="price-info">from ${escapeHtml(sym)}${s.basePrice.toFixed(2)} on ${escapeHtml(baseDateStr)}</div>` : ""}
       </td>
       <td><span class="mono" style="color:#a0aec0">${escapeHtml(priceStr)}</span></td>
-      <td>${isBuy ? '<span class="sig-buy">● BUY</span>' : '<span class="sig-skip">○ SKIP</span>'}</td>
+      <td>${isBuy ? `<span class="sig-buy">${icon("circle-dot")} BUY</span>` : `<span class="sig-skip">${icon("circle")} SKIP</span>`}</td>
     </tr>`;
   });
   tbody.innerHTML = rowsHtml.join("");
+  renderIcons();
 
   // Heatmap
   const allMonthLabels = ranked[0]?.monthly?.map(m => m.label) || [];
@@ -1092,10 +1105,11 @@ function renderEditorTickers() {
       <select class="ed-tag" data-id="${t.id}" data-field="tag">${getTagOptionsHtml(list, t.tag)}</select>
       <input class="ed-cur" value="${escapeAttr(t.currency)}" data-id="${t.id}" data-field="currency" maxlength="3" />
       <button class="ed-btn-save" onclick="saveTicker(${t.id}, this)">Save</button>
-      <button class="ed-btn-del" onclick="deleteTicker(${t.id})">✕</button>
+      <button class="ed-btn-del" onclick="deleteTicker(${t.id})" aria-label="Delete ${escapeAttr(t.ticker)}">${icon("x")}</button>
     `;
     container.appendChild(row);
   });
+  renderIcons();
 }
 
 // ═══════════════════════════════════════════
@@ -1185,7 +1199,8 @@ async function saveTicker(id, btn) {
       body: JSON.stringify(body)
     });
     btn.style.borderColor = "#38a169";
-    btn.textContent = "✓";
+    btn.innerHTML = icon("check");
+    renderIcons();
     setTimeout(() => { btn.style.borderColor = "#68d391"; btn.textContent = "Save"; }, 800);
 
     const list = LISTS[state.activeList];

@@ -11,7 +11,7 @@
   <link
     href="https://fonts.googleapis.com/css2?family=Google+Sans:ital,opsz,wght@0,17..18,400..700;1,17..18,400..700&family=Google+Sans+Code:wght@400..700&display=swap"
     rel="stylesheet">
-  <link rel="stylesheet" href="static/styles.css?v=4" />
+  <link rel="stylesheet" href="static/styles.css?v=5" />
 </head>
 
 <body class="auth-pending">
@@ -89,9 +89,9 @@
     <!-- ─── LIST VIEW ─── -->
     <div id="view-list" style="display:none;">
       <div class="list-topbar">
-        <button class="breadcrumb-btn" onclick="showHome()">← Home</button>
+        <button class="breadcrumb-btn" onclick="showHome()"><i data-lucide="arrow-left" class="icon"></i> Home</button>
         <span id="updated-label" class="updated-label"></span>
-        <button id="edit-btn" onclick="openEditor()" class="edit-tickers-btn">✎ Edit Tickers</button>
+        <button id="edit-btn" onclick="openEditor()" class="edit-tickers-btn"><i data-lucide="pencil" class="icon"></i> Edit Tickers</button>
       </div>
       <h1 id="page-title" class="list-title"></h1>
       <p class="subtitle" id="page-subtitle"></p>
@@ -184,7 +184,7 @@
     <div class="modal-box">
       <div class="modal-header">
         <h2>Change Password</h2>
-        <button onclick="closePasswordModal()" class="modal-close-btn">✕</button>
+        <button onclick="closePasswordModal()" class="modal-close-btn" aria-label="Close"><i data-lucide="x" class="icon"></i></button>
       </div>
       <form onsubmit="savePassword(event)">
         <div class="modal-fields">
@@ -214,7 +214,7 @@
 
       <div style="display:flex;justify-content:space-between;align-items:center;">
         <h2 style="font-size:18px;color:#f7fafc;font-weight:600;">Edit Tickers</h2>
-        <button onclick="closeEditor()" class="editor-close-btn">✕ Close</button>
+        <button onclick="closeEditor()" class="editor-close-btn"><i data-lucide="x" class="icon"></i> Close</button>
       </div>
 
       <div class="editor-section">
@@ -227,7 +227,7 @@
             <input id="ed-add-name" type="text" placeholder="Apple Inc." style="flex:1;min-width:100px;" />
             <select id="ed-add-tag" style="width:120px;"></select>
             <input id="ed-add-cur" type="text" placeholder="USD" style="width:60px;" maxlength="3" />
-            <button onclick="addTicker()" class="ed-btn-save" style="white-space:nowrap;">+ Add</button>
+            <button onclick="addTicker()" class="ed-btn-save" style="white-space:nowrap;"><i data-lucide="plus" class="icon"></i> Add</button>
           </div>
         </div>
       </div>
@@ -242,7 +242,7 @@
     <div class="modal-box">
       <div class="modal-header">
         <h2 id="list-edit-title">Edit List</h2>
-        <button onclick="closeListEditModal()" class="modal-close-btn">✕</button>
+        <button onclick="closeListEditModal()" class="modal-close-btn" aria-label="Close"><i data-lucide="x" class="icon"></i></button>
       </div>
 
       <div class="modal-fields">
@@ -284,7 +284,8 @@
       </div>
     </div>
   </div>
-  <script src="static/app.js?v=5"></script>
+  <script src="https://unpkg.com/lucide@1.23.0/dist/umd/lucide.js"></script>
+  <script src="static/app.js?v=6"></script>
 </body>
 
 </html>
