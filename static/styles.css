@@ -257,6 +257,33 @@ select {
   font-family: inherit;
 }
 
+.icon {
+  width: 1em;
+  height: 1em;
+  flex: 0 0 auto;
+  stroke-width: 1.8;
+}
+
+button .icon,
+.sig-buy .icon,
+.sig-skip .icon {
+  display: inline-block;
+  vertical-align: -0.12em;
+}
+
+.breadcrumb-btn,
+.edit-tickers-btn,
+.editor-close-btn,
+.ed-btn-save,
+.tag-add-row button,
+.sig-buy,
+.sig-skip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
 /* Typography Utilities */
 .mono {
   font-family: 'Google Sans Code', monospace;
@@ -524,10 +551,11 @@ select {
 }
 
 .wl-card-new-icon {
-  font-size: 24px;
-  font-weight: 300;
+  font-size: 28px;
   color: var(--text-tertiary);
   transition: var(--transition-fast);
+  display: grid;
+  place-items: center;
 }
 
 .wl-card-new:hover .wl-card-new-icon {
@@ -586,7 +614,7 @@ select {
 
 .tag-chip-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(155px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 8px;
   margin-bottom: 14px;
 }
@@ -595,31 +623,31 @@ select {
   display: flex;
   align-items: center;
   min-width: 0;
-  gap: 8px;
-  padding: 6px;
+  gap: 10px;
+  min-height: 46px;
+  padding: 5px 8px;
   border: 1px solid var(--border-subtle);
   background: rgba(255, 255, 255, 0.015);
 }
 
-.tag-color-preview {
-  display: block;
+.tag-color-name {
+  display: flex;
+  align-items: center;
   flex: 1;
   min-width: 0;
-  padding: 5px 8px;
-  border-radius: 0;
   font-size: 10px;
+  color: var(--text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.08em;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  text-align: center;
 }
 
 .tag-color-input {
-  width: 34px;
-  height: 34px;
-  flex: 0 0 34px;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
   border: none;
   border-radius: 50%;
   background: transparent;
@@ -655,6 +683,11 @@ select {
   display: grid;
   place-items: center;
   transition: var(--transition-fast);
+}
+
+.tag-color-del .icon {
+  width: 15px;
+  height: 15px;
 }
 
 .tag-color-del:hover,
