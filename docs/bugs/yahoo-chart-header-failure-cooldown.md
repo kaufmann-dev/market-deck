@@ -20,7 +20,7 @@ The metrics failure cooldown also treated every unsuccessful chart fetch as a kn
 
 ## Changes made
 
-- Split chart requests onto `_CHART_HEADERS = {"User-Agent": "Mozilla/5.0"}` while leaving the fuller headers in place for search, news, and quoteSummary requests.
+- Split chart requests onto `_CHART_HEADERS = {"User-Agent": "Mozilla/5.0"}`. A later stock-dashboard availability fix extended the same minimal header back to search, news, crumb, and quoteSummary requests after the fuller headers also proved incompatible with those Yahoo surfaces.
 - Changed `download_prices` chart URLs from wall-clock `period1`/`period2` timestamps to Yahoo's relative `range=2y` query to avoid future-dated local clocks producing brittle requests.
 - Added `PriceDownloadResult.permanent_failures` so `price_cache.record_fetch_results` only places unresolved 404 symbols into the cooldown when the Yahoo downloader can distinguish permanent failures from transient ones.
 - Added a regression test asserting metrics chart requests use `range=2y` and do not send `period1` or `period2`.
