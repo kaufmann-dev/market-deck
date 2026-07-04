@@ -1807,6 +1807,14 @@ tr:hover td {
   display: none;
 }
 
+/* Hide the hamburger toggle whenever any modal/editor overlay is open, so it
+   never floats over a modal. Covers every overlay using these root classes,
+   including ones added later. */
+body:has(.modal-overlay) .mobile-nav-toggle,
+body:has(.editor-overlay-root) .mobile-nav-toggle {
+  display: none;
+}
+
 /* ─── Tablet (2x2 Grid) ─── */
 @media (max-width: 1200px) {
   .controls {
