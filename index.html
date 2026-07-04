@@ -11,7 +11,7 @@
   <link
     href="https://fonts.googleapis.com/css2?family=Google+Sans:ital,opsz,wght@0,17..18,400..700;1,17..18,400..700&family=Google+Sans+Code:wght@400..700&display=swap"
     rel="stylesheet">
-  <link rel="stylesheet" href="static/styles.css?v=6" />
+  <link rel="stylesheet" href="static/styles.css?v=7" />
 </head>
 
 <body class="auth-pending">
@@ -54,8 +54,15 @@
   <div class="main">
     <div id="session-bar" class="session-bar" style="display:none;">
       <span id="session-label" class="session-label"></span>
-      <button id="change-password-btn" type="button" onclick="openPasswordModal()">Change Password</button>
-      <button type="button" onclick="logout()">Logout</button>
+      <button id="change-password-btn" type="button" onclick="openPasswordModal()">
+        <i data-lucide="key-round" class="icon"></i>
+        <span class="label-full">Change Password</span>
+        <span class="label-short">Password</span>
+      </button>
+      <button type="button" onclick="logout()">
+        <i data-lucide="log-out" class="icon"></i>
+        Logout
+      </button>
     </div>
 
     <!-- ─── HOMEPAGE VIEW ─── -->
@@ -285,7 +292,7 @@
     </div>
   </div>
   <script src="https://unpkg.com/lucide@1.23.0/dist/umd/lucide.js"></script>
-  <script src="static/app.js?v=6"></script>
+  <script src="static/app.js?v=7"></script>
 </body>
 
 </html>
