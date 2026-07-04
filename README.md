@@ -1,6 +1,6 @@
 # Market Deck
 
-Dashboard for ranking financial assets by price momentum — live prices, FX conversion, return heatmaps, and multi-watchlist management — powered by FastAPI, SQLite, and Yahoo Finance.
+Dashboard for ranking financial assets by price momentum — live prices, FX conversion, return heatmaps, and multi-watchlist management — powered by FastAPI, PostgreSQL, and Yahoo Finance.
 
 ## Navigation
 
@@ -16,7 +16,7 @@ Dashboard for ranking financial assets by price momentum — live prices, FX con
 
 ## Features
 
-- Admin account with full access to watchlists, tickers, settings, tag colors, cache clearing, and password changes.
+- Admin account with full access to watchlists, tickers, per-list tags, settings, cache clearing, and password changes.
 - Demo account with read-only access.
 - PostgreSQL schema creation and seed data on first startup.
 - JWT login/session restore.
@@ -110,7 +110,7 @@ Changing `MARKETDECK_ADMIN_PASSWORD` later does not overwrite an existing databa
 
 ### Database Seeding
 
-Dashboard seed data is first-deploy only. If the `watchlists` table already has rows, the app skips watchlist/ticker/tag/settings seeding.
+Dashboard seed data is first-deploy only. If the `watchlists` table already has rows, the app skips watchlist/ticker/settings seeding. Startup migrations still normalize existing ticker tags and create per-list tag catalogs when needed.
 
 Admin users are inserted with `ON CONFLICT DO NOTHING`, so redeploys do not reset the admin password. Demo user seeding is also idempotent.
 
@@ -234,10 +234,11 @@ Admin only:
 - `PUT /api/lists/{slug}`
 - `DELETE /api/lists/{slug}`
 - `POST /api/lists/{slug}/tickers`
+- `POST /api/lists/{slug}/tags`
+- `PUT /api/lists/{slug}/tags/{tag}`
+- `DELETE /api/lists/{slug}/tags/{tag}`
 - `PUT /api/tickers/{id}`
 - `DELETE /api/tickers/{id}`
-- `PUT /api/tag-colors/{tag}`
-- `DELETE /api/tag-colors/{tag}`
 - `DELETE /api/prices/cache`
 
 Protected endpoints require:

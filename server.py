@@ -227,7 +227,7 @@ def require_admin(current_user: CurrentUser = Depends(get_current_user)) -> Curr
 class TickerCreate(BaseModel):
     symbol: str
     name: str
-    tag: str = ""
+    tag: str
     currency: str = "USD"
 
 
@@ -244,9 +244,8 @@ class WatchlistCreate(BaseModel):
     short_name: str
     category: str = "Other"
     description: str = ""
-    tag: str = ""
     currency: str = "USD"
-    show_type: bool = True
+    show_tag: bool = True
 
 
 class WatchlistUpdate(BaseModel):
@@ -254,9 +253,8 @@ class WatchlistUpdate(BaseModel):
     short_name: Optional[str] = None
     category: Optional[str] = None
     description: Optional[str] = None
-    tag: Optional[str] = None
     currency: Optional[str] = None
-    show_type: Optional[bool] = None
+    show_tag: Optional[bool] = None
 
 
 class SettingUpdate(BaseModel):
@@ -267,7 +265,8 @@ class PricesRequest(BaseModel):
     tickers: List[str]
 
 
-class TagColorUpdate(BaseModel):
+class TagUpdate(BaseModel):
+    tag: Optional[str] = None
     bg: str
     text: str
     border: str
@@ -291,6 +290,60 @@ def _normalize_category(category: Optional[str]) -> str:
 def _normalize_tag(tag: str) -> str:
     cleaned = " ".join(str(tag or "").split())
     return cleaned.upper()
+
+
+def _tag_color_defaults(tag: str) -> dict:
+    normalized_tag = _normalize_tag(tag)
+    seeded = {_normalize_tag(name): colors for name, colors in SEED_TAG_COLORS.items()}
+    if normalized_tag == "GLOBAL":
+        return {
+            "bg": "rgba(99, 102, 241, .1)",
+            "text": "#818cf8",
+            "border": "rgba(99, 102, 241, .3)",
+        }
+    return seeded.get(normalized_tag, seeded["OTHER"])
+
+
+def _column_exists(cur, table: str, column: str) -> bool:
+    cur.execute(
+        """
+        SELECT EXISTS (
+            SELECT 1
+            FROM information_schema.columns
+            WHERE table_schema = current_schema()
+              AND table_name = %s
+              AND column_name = %s
+        )
+        """,
+        (table, column),
+    )
+    return cur.fetchone()[0]
+
+
+def _table_exists(cur, table: str) -> bool:
+    cur.execute("SELECT to_regclass(%s)", (table,))
+    return cur.fetchone()[0] is not None
+
+
+def _require_watchlist_tag(cur, watchlist_id: int, tag: str) -> str:
+    normalized_tag = _normalize_tag(tag)
+    if not normalized_tag:
+        raise HTTPException(400, "Tag is required")
+    cur.execute(
+        "SELECT 1 FROM watchlist_tags WHERE watchlist_id = %s AND tag = %s",
+        (watchlist_id, normalized_tag),
+    )
+    if not cur.fetchone():
+        raise HTTPException(400, f"Tag '{normalized_tag}' is not defined for this list")
+    return normalized_tag
+
+
+def _get_watchlist_id(cur, slug: str) -> int:
+    cur.execute("SELECT id FROM watchlists WHERE slug = %s", (slug,))
+    row = cur.fetchone()
+    if not row:
+        raise HTTPException(404, "List not found")
+    return row["id"]
 
 
 def init_database():
@@ -325,9 +378,8 @@ def init_database():
                     short_name TEXT NOT NULL,
                     category TEXT NOT NULL DEFAULT 'Other',
                     description TEXT NOT NULL DEFAULT '',
-                    tag TEXT NOT NULL DEFAULT '',
                     currency TEXT NOT NULL DEFAULT 'USD',
-                    show_type BOOLEAN NOT NULL DEFAULT TRUE
+                    show_tag BOOLEAN NOT NULL DEFAULT TRUE
                 )
                 """
             )
@@ -346,11 +398,15 @@ def init_database():
             )
             cur.execute(
                 """
-                CREATE TABLE IF NOT EXISTS tag_colors (
-                    tag TEXT PRIMARY KEY,
+                CREATE TABLE IF NOT EXISTS watchlist_tags (
+                    id SERIAL PRIMARY KEY,
+                    watchlist_id INTEGER NOT NULL REFERENCES watchlists(id) ON DELETE CASCADE,
+                    tag TEXT NOT NULL,
                     bg TEXT NOT NULL,
                     text TEXT NOT NULL,
-                    border TEXT NOT NULL
+                    border TEXT NOT NULL,
+                    sort_order INTEGER NOT NULL DEFAULT 0,
+                    UNIQUE (watchlist_id, tag)
                 )
                 """
             )
@@ -369,12 +425,22 @@ def init_database():
                 "CREATE INDEX IF NOT EXISTS idx_tickers_watchlist_id ON tickers(watchlist_id)"
             )
             cur.execute(
+                "CREATE INDEX IF NOT EXISTS idx_watchlist_tags_watchlist_id ON watchlist_tags(watchlist_id)"
+            )
+            cur.execute(
                 "CREATE INDEX IF NOT EXISTS idx_price_cache_cached_at ON price_cache(cached_at)"
             )
+            if _column_exists(cur, "watchlists", "show_type") and not _column_exists(cur, "watchlists", "show_tag"):
+                cur.execute("ALTER TABLE watchlists RENAME COLUMN show_type TO show_tag")
+            elif not _column_exists(cur, "watchlists", "show_tag"):
+                cur.execute("ALTER TABLE watchlists ADD COLUMN show_tag BOOLEAN NOT NULL DEFAULT TRUE")
+            if _column_exists(cur, "watchlists", "tag"):
+                cur.execute("ALTER TABLE watchlists DROP COLUMN tag")
             conn.commit()
 
         seed_users(conn)
         seed_initial_data(conn)
+        sync_watchlist_tags(conn)
 
 
 def seed_users(conn):
@@ -421,8 +487,8 @@ def seed_initial_data(conn):
         for watchlist in SEED_WATCHLISTS:
             cur.execute(
                 """
-                INSERT INTO watchlists (slug, name, short_name, category, description, tag, currency, show_type)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                INSERT INTO watchlists (slug, name, short_name, category, description, currency, show_tag)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
                 ON CONFLICT (slug) DO NOTHING
                 RETURNING id
                 """,
@@ -432,9 +498,8 @@ def seed_initial_data(conn):
                     watchlist["short_name"],
                     _normalize_category(watchlist.get("category")),
                     watchlist.get("description", ""),
-                    watchlist.get("tag", ""),
                     watchlist.get("currency", "USD"),
-                    watchlist.get("show_type", True),
+                    watchlist.get("show_tag", True),
                 ),
             )
             row = cur.fetchone()
@@ -457,23 +522,69 @@ def seed_initial_data(conn):
                     watchlist_id,
                     ticker["symbol"],
                     ticker["name"],
-                    ticker.get("tag", ""),
+                    _normalize_tag(ticker.get("tag", "")),
                     ticker.get("currency", "USD"),
                     sort_order,
                 ),
             )
-
-        for tag, colors in SEED_TAG_COLORS.items():
-            cur.execute(
-                """
-                INSERT INTO tag_colors (tag, bg, text, border)
-                VALUES (%s, %s, %s, %s)
-                ON CONFLICT (tag) DO NOTHING
-                """,
-                (_normalize_tag(tag), colors["bg"], colors["text"], colors["border"]),
-            )
     conn.commit()
     print("seed complete: initial Market Deck data inserted")
+
+
+def sync_watchlist_tags(conn):
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        legacy_colors = {}
+        if _table_exists(cur, "tag_colors"):
+            cur.execute("SELECT tag, bg, text, border FROM tag_colors")
+            legacy_colors = {
+                _normalize_tag(row["tag"]): {
+                    "bg": row["bg"],
+                    "text": row["text"],
+                    "border": row["border"],
+                }
+                for row in cur.fetchall()
+            }
+
+        cur.execute(
+            """
+            UPDATE tickers
+            SET tag = UPPER(REGEXP_REPLACE(BTRIM(tag), '\\s+', ' ', 'g'))
+            """
+        )
+        cur.execute("SELECT id FROM watchlists ORDER BY id")
+        for watchlist in cur.fetchall():
+            cur.execute(
+                """
+                SELECT tag, MIN(sort_order) AS first_sort, MIN(id) AS first_id
+                FROM tickers
+                WHERE watchlist_id = %s AND BTRIM(tag) <> ''
+                GROUP BY tag
+                ORDER BY first_sort, first_id
+                """,
+                (watchlist["id"],),
+            )
+            for sort_order, row in enumerate(cur.fetchall()):
+                tag = _normalize_tag(row["tag"])
+                colors = legacy_colors.get(tag) or _tag_color_defaults(tag)
+                cur.execute(
+                    """
+                    INSERT INTO watchlist_tags (watchlist_id, tag, bg, text, border, sort_order)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (watchlist_id, tag) DO NOTHING
+                    """,
+                    (
+                        watchlist["id"],
+                        tag,
+                        colors["bg"],
+                        colors["text"],
+                        colors["border"],
+                        sort_order,
+                    ),
+                )
+
+        if _table_exists(cur, "tag_colors"):
+            cur.execute("DROP TABLE tag_colors")
+    conn.commit()
 
 
 @app.on_event("startup")
@@ -556,12 +667,6 @@ def api_init(current_user: CurrentUser = Depends(get_current_user)):
         cur.execute("SELECT key, value FROM settings")
         settings = {row["key"]: row["value"] for row in cur.fetchall()}
 
-        cur.execute("SELECT tag, bg, text, border FROM tag_colors")
-        tag_colors = {
-            row["tag"]: {"bg": row["bg"], "text": row["text"], "border": row["border"]}
-            for row in cur.fetchall()
-        }
-
         cur.execute("SELECT * FROM watchlists ORDER BY id")
         watchlists = dict_rows(cur)
         lists = {
@@ -571,14 +676,35 @@ def api_init(current_user: CurrentUser = Depends(get_current_user)):
                 "shortName": wl["short_name"],
                 "category": wl["category"],
                 "description": wl["description"],
-                "tag": wl["tag"],
                 "currency": wl["currency"],
-                "showType": bool(wl["show_type"]),
+                "showTag": bool(wl["show_tag"]),
+                "tags": [],
                 "items": [],
             }
             for wl in watchlists
         }
         watchlist_slugs = {wl["id"]: wl["slug"] for wl in watchlists}
+
+        cur.execute(
+            """
+            SELECT watchlist_id, tag, bg, text, border, sort_order
+            FROM watchlist_tags
+            ORDER BY watchlist_id, sort_order, tag
+            """
+        )
+        for tag in cur.fetchall():
+            slug = watchlist_slugs.get(tag["watchlist_id"])
+            if slug is None:
+                continue
+            lists[slug]["tags"].append(
+                {
+                    "tag": tag["tag"],
+                    "bg": tag["bg"],
+                    "text": tag["text"],
+                    "border": tag["border"],
+                    "sortOrder": tag["sort_order"],
+                }
+            )
 
         cur.execute("SELECT * FROM tickers ORDER BY watchlist_id, sort_order")
         for ticker in cur.fetchall():
@@ -595,7 +721,7 @@ def api_init(current_user: CurrentUser = Depends(get_current_user)):
                 }
             )
 
-    return {"settings": settings, "tagColors": tag_colors, "lists": lists}
+    return {"settings": settings, "lists": lists}
 
 
 @app.get("/api/settings")
@@ -634,8 +760,8 @@ def create_list(
             category = _normalize_category(body.category)
             cur.execute(
                 """
-                INSERT INTO watchlists (slug, name, short_name, category, description, tag, currency, show_type)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                INSERT INTO watchlists (slug, name, short_name, category, description, currency, show_tag)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
                 RETURNING id
                 """,
                 (
@@ -644,9 +770,8 @@ def create_list(
                     body.short_name,
                     category,
                     body.description,
-                    body.tag,
                     body.currency,
-                    body.show_type,
+                    body.show_tag,
                 ),
             )
             row = cur.fetchone()
@@ -680,9 +805,8 @@ def update_list(
             "short_name": "short_name",
             "category": "category",
             "description": "description",
-            "tag": "tag",
             "currency": "currency",
-            "show_type": "show_type",
+            "show_tag": "show_tag",
         }
         set_clause = ", ".join(f"{allowed_columns[key]} = %s" for key in updates)
         vals = list(updates.values()) + [slug]
@@ -713,11 +837,9 @@ def add_ticker(
     current_user: CurrentUser = Depends(require_admin),
 ):
     with get_db() as conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
-        cur.execute("SELECT id FROM watchlists WHERE slug = %s", (slug,))
-        wl = cur.fetchone()
-        if not wl:
-            raise HTTPException(404, "List not found")
-        cur.execute("SELECT COALESCE(MAX(sort_order), -1) AS max_order FROM tickers WHERE watchlist_id = %s", (wl["id"],))
+        watchlist_id = _get_watchlist_id(cur, slug)
+        tag = _require_watchlist_tag(cur, watchlist_id, body.tag)
+        cur.execute("SELECT COALESCE(MAX(sort_order), -1) AS max_order FROM tickers WHERE watchlist_id = %s", (watchlist_id,))
         max_order = cur.fetchone()["max_order"]
         cur.execute(
             """
@@ -725,7 +847,7 @@ def add_ticker(
             VALUES (%s, %s, %s, %s, %s, %s)
             RETURNING id
             """,
-            (wl["id"], body.symbol, body.name, body.tag, body.currency, max_order + 1),
+            (watchlist_id, body.symbol, body.name, tag, body.currency, max_order + 1),
         )
         row = cur.fetchone()
         conn.commit()
@@ -739,13 +861,16 @@ def update_ticker(
     current_user: CurrentUser = Depends(require_admin),
 ):
     with get_db() as conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
-        cur.execute("SELECT id FROM tickers WHERE id = %s", (ticker_id,))
-        if not cur.fetchone():
+        cur.execute("SELECT id, watchlist_id FROM tickers WHERE id = %s", (ticker_id,))
+        ticker = cur.fetchone()
+        if not ticker:
             raise HTTPException(404, "Ticker not found")
 
         updates = {k: v for k, v in body.model_dump().items() if v is not None}
         if not updates:
             raise HTTPException(400, "No fields to update")
+        if "tag" in updates:
+            updates["tag"] = _require_watchlist_tag(cur, ticker["watchlist_id"], updates["tag"])
 
         allowed_columns = {
             "symbol": "symbol",
@@ -774,37 +899,79 @@ def delete_ticker(
     return {"ok": True}
 
 
-@app.put("/api/tag-colors/{tag}")
-def update_tag_color(
+@app.post("/api/lists/{slug}/tags")
+def create_list_tag(
+    slug: str,
+    body: TagUpdate,
+    current_user: CurrentUser = Depends(require_admin),
+):
+    normalized_tag = _normalize_tag(body.tag or "")
+    if not normalized_tag:
+        raise HTTPException(400, "Tag is required")
+    with get_db() as conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
+        watchlist_id = _get_watchlist_id(cur, slug)
+        try:
+            cur.execute("SELECT COALESCE(MAX(sort_order), -1) AS max_order FROM watchlist_tags WHERE watchlist_id = %s", (watchlist_id,))
+            sort_order = cur.fetchone()["max_order"] + 1
+            cur.execute(
+                """
+                INSERT INTO watchlist_tags (watchlist_id, tag, bg, text, border, sort_order)
+                VALUES (%s, %s, %s, %s, %s, %s)
+                """,
+                (watchlist_id, normalized_tag, body.bg, body.text, body.border, sort_order),
+            )
+            conn.commit()
+        except psycopg2.errors.UniqueViolation:
+            conn.rollback()
+            raise HTTPException(400, f"Tag '{normalized_tag}' already exists for this list")
+    return {"tag": normalized_tag}
+
+
+@app.put("/api/lists/{slug}/tags/{tag}")
+def update_list_tag(
+    slug: str,
     tag: str,
-    body: TagColorUpdate,
+    body: TagUpdate,
     current_user: CurrentUser = Depends(require_admin),
 ):
     normalized_tag = _normalize_tag(tag)
-    with get_db() as conn, conn.cursor() as cur:
+    with get_db() as conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
+        watchlist_id = _get_watchlist_id(cur, slug)
         cur.execute(
             """
-            INSERT INTO tag_colors (tag, bg, text, border)
-            VALUES (%s, %s, %s, %s)
-            ON CONFLICT (tag) DO UPDATE SET
-                bg = EXCLUDED.bg,
-                text = EXCLUDED.text,
-                border = EXCLUDED.border
+            UPDATE watchlist_tags
+            SET bg = %s, text = %s, border = %s
+            WHERE watchlist_id = %s AND tag = %s
             """,
-            (normalized_tag, body.bg, body.text, body.border),
+            (body.bg, body.text, body.border, watchlist_id, normalized_tag),
         )
+        if cur.rowcount == 0:
+            raise HTTPException(404, "Tag not found")
         conn.commit()
     return {"ok": True}
 
 
-@app.delete("/api/tag-colors/{tag}")
-def delete_tag_color(
+@app.delete("/api/lists/{slug}/tags/{tag}")
+def delete_list_tag(
+    slug: str,
     tag: str,
     current_user: CurrentUser = Depends(require_admin),
 ):
     normalized_tag = _normalize_tag(tag)
-    with get_db() as conn, conn.cursor() as cur:
-        cur.execute("DELETE FROM tag_colors WHERE tag = %s", (normalized_tag,))
+    with get_db() as conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
+        watchlist_id = _get_watchlist_id(cur, slug)
+        cur.execute(
+            "SELECT COUNT(*) AS count FROM tickers WHERE watchlist_id = %s AND tag = %s",
+            (watchlist_id, normalized_tag),
+        )
+        if cur.fetchone()["count"] > 0:
+            raise HTTPException(400, "Cannot delete a tag while tickers use it")
+        cur.execute(
+            "DELETE FROM watchlist_tags WHERE watchlist_id = %s AND tag = %s",
+            (watchlist_id, normalized_tag),
+        )
+        if cur.rowcount == 0:
+            raise HTTPException(404, "Tag not found")
         conn.commit()
     return {"ok": True}
 
