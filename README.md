@@ -134,7 +134,7 @@ If you scale horizontally, move rate-limit storage to a shared backend such as R
 
 ### Price Cache
 
-Yahoo Finance responses are fetched in threaded bulk requests and cached in PostgreSQL per account and ticker. This means the demo account shares cached prices across devices, while admin and demo sessions do not share price-cache entries with each other.
+Yahoo Finance chart responses are fetched in parallel and cached in PostgreSQL per account and ticker. This means the demo account shares cached prices across devices, while admin and demo sessions do not share price-cache entries with each other.
 
 The default cache TTL is 1 hour. Override it with:
 

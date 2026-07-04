@@ -1,20 +1,24 @@
 """
 FastAPI backend serving Market Deck static files and REST APIs.
 """
+import json
+import math
 import os
 import sys
 import time as _time
+from concurrent.futures import ThreadPoolExecutor, wait
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from threading import Lock
 from typing import List, Optional
+from urllib.parse import quote
+from urllib.request import Request as UrlRequest, urlopen
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-import pandas as pd
 import psycopg2
 import psycopg2.errors
 import psycopg2.pool
-import yfinance as yf
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse
 from jose import JWTError, jwt
@@ -59,9 +63,13 @@ def _float_env(name: str, default: float) -> float:
 DB_CONNECT_RETRIES = _int_env("MARKETDECK_DB_CONNECT_RETRIES", 30)
 DB_CONNECT_RETRY_DELAY = _float_env("MARKETDECK_DB_CONNECT_RETRY_DELAY", 2)
 PRICE_CACHE_TTL_SECONDS = _int_env("MARKETDECK_PRICE_CACHE_TTL_SECONDS", 3600)
-PRICE_FETCH_BATCH_SIZE = 25
-PRICE_FETCH_TIMEOUT_SECONDS = 8
+PRICE_FETCH_MAX_WORKERS = 32
+PRICE_FETCH_TIMEOUT_SECONDS = 5
+PRICE_FETCH_TOTAL_TIMEOUT_SECONDS = 5
 PRICE_FAILURE_COOLDOWN_SECONDS = 300
+PRICE_HISTORY_DAYS = 430
+YAHOO_CHART_BASE_URL = "https://query1.finance.yahoo.com/v8/finance/chart"
+YAHOO_CHART_HEADERS = {"User-Agent": "Mozilla/5.0"}
 _price_failure_cache = {}
 _price_failure_cache_lock = Lock()
 
@@ -880,11 +888,6 @@ def _set_cached_prices(account_email: str, price_data):
         conn.commit()
 
 
-def _chunks(items, size):
-    for index in range(0, len(items), size):
-        yield items[index:index + size]
-
-
 def _recent_failed_tickers(tickers):
     now = _time.monotonic()
     recent = []
@@ -910,126 +913,116 @@ def _record_price_fetch_results(price_data):
                 _price_failure_cache[ticker] = now
 
 
+def _chart_timezone(meta):
+    timezone_name = (meta or {}).get("exchangeTimezoneName") or (meta or {}).get("timezone")
+    if not timezone_name:
+        return timezone.utc
+    try:
+        return ZoneInfo(timezone_name)
+    except ZoneInfoNotFoundError:
+        return timezone.utc
+
+
+def _chart_closes(indicators):
+    if not isinstance(indicators, dict):
+        return []
+
+    adjclose = indicators.get("adjclose") or []
+    if adjclose:
+        closes = adjclose[0].get("adjclose") if isinstance(adjclose[0], dict) else None
+        if closes and any(close is not None for close in closes):
+            return closes
+
+    quote_data = indicators.get("quote") or []
+    if quote_data:
+        closes = quote_data[0].get("close") if isinstance(quote_data[0], dict) else None
+        if closes and any(close is not None for close in closes):
+            return closes
+    return []
+
+
+def _parse_chart_payload(payload):
+    chart = payload.get("chart") if isinstance(payload, dict) else None
+    if not isinstance(chart, dict) or chart.get("error"):
+        return None
+
+    results = chart.get("result") or []
+    if not results or not isinstance(results[0], dict):
+        return None
+
+    result = results[0]
+    timestamps = result.get("timestamp") or []
+    closes = _chart_closes(result.get("indicators"))
+    if not timestamps or not closes:
+        return None
+
+    tz = _chart_timezone(result.get("meta"))
+    points = []
+    for timestamp, close in zip(timestamps, closes):
+        if close is None:
+            continue
+        try:
+            close_value = float(close)
+            timestamp_value = int(timestamp)
+        except (TypeError, ValueError):
+            continue
+        if not math.isfinite(close_value):
+            continue
+        date = datetime.fromtimestamp(timestamp_value, tz).date().isoformat()
+        points.append({"date": date, "close": round(close_value, 4)})
+    return points if len(points) >= 2 else None
+
+
+def _chart_url(ticker, period1, period2):
+    encoded_ticker = quote(ticker, safe="")
+    return (
+        f"{YAHOO_CHART_BASE_URL}/{encoded_ticker}"
+        f"?period1={period1}&period2={period2}"
+        "&interval=1d&events=history&includeAdjustedClose=true"
+    )
+
+
+def _fetch_chart_prices(ticker, period1, period2):
+    request = UrlRequest(_chart_url(ticker, period1, period2), headers=YAHOO_CHART_HEADERS)
+    with urlopen(request, timeout=PRICE_FETCH_TIMEOUT_SECONDS) as response:
+        payload = json.loads(response.read())
+    return _parse_chart_payload(payload)
+
+
 def _download_prices(tickers):
     if not tickers:
         return {}
 
-    df = yf.download(
-        tickers,
-        period="14mo",
-        interval="1d",
-        auto_adjust=True,
-        progress=False,
-        threads=True,
-        timeout=PRICE_FETCH_TIMEOUT_SECONDS,
-    )
-    return _parse_df(df, tickers)
-
-
-def _download_prices_resilient(tickers):
-    if not tickers:
-        return {}
+    now = datetime.now(timezone.utc)
+    period1 = int((now - timedelta(days=PRICE_HISTORY_DAYS)).timestamp())
+    period2 = int(now.timestamp())
+    result = {ticker: None for ticker in tickers}
+    executor = ThreadPoolExecutor(max_workers=min(PRICE_FETCH_MAX_WORKERS, len(tickers)))
+    futures = {
+        executor.submit(_fetch_chart_prices, ticker, period1, period2): ticker
+        for ticker in tickers
+    }
 
     try:
-        fresh = _download_prices(tickers)
-        missing = [ticker for ticker, data in fresh.items() if data is None]
-        if missing:
+        done, not_done = wait(futures, timeout=PRICE_FETCH_TOTAL_TIMEOUT_SECONDS)
+        for future in not_done:
+            future.cancel()
+
+        failures = []
+        for future in done:
+            ticker = futures[future]
             try:
-                retry_data = _download_prices(missing)
-                fresh.update(retry_data)
-            except Exception as retry_error:
-                print(f"yfinance retry error for {len(missing)} tickers: {retry_error}")
-        return {ticker: fresh.get(ticker) for ticker in tickers}
-    except Exception as exc:
-        print(f"yfinance download error for {len(tickers)} tickers: {exc}")
-
-    fresh = {}
-    for batch in _chunks(tickers, PRICE_FETCH_BATCH_SIZE):
-        try:
-            batch_data = _download_prices(batch)
-        except Exception as batch_error:
-            print(f"yfinance batch fallback error for {len(batch)} tickers: {batch_error}")
-            batch_data = {ticker: None for ticker in batch}
-        fresh.update({ticker: batch_data.get(ticker) for ticker in batch})
-    return fresh
-
-
-def _extract_close_series(df, ticker):
-    if isinstance(df, pd.Series):
-        return df.dropna()
-
-    if isinstance(df, pd.DataFrame):
-        if isinstance(df.columns, pd.MultiIndex):
-            for candidate in (("Close", ticker), (ticker, "Close")):
-                if candidate in df.columns:
-                    return df[candidate].dropna()
-
-            for level in (0, -1):
-                try:
-                    closes = df.xs("Close", axis=1, level=level)
-                except (KeyError, ValueError):
-                    continue
-
-                if isinstance(closes, pd.Series):
-                    return closes.dropna()
-                if ticker in closes.columns:
-                    return closes[ticker].dropna()
-                if closes.shape[1] == 1:
-                    return closes.iloc[:, 0].dropna()
-
-        if "Close" in df.columns:
-            closes = df["Close"]
-            if isinstance(closes, pd.DataFrame):
-                if ticker in closes.columns:
-                    return closes[ticker].dropna()
-                if closes.shape[1] == 1:
-                    return closes.iloc[:, 0].dropna()
-            return closes.dropna()
-
-    if hasattr(df, "Close"):
-        closes = df.Close
-        if isinstance(closes, pd.DataFrame):
-            if ticker in closes.columns:
-                return closes[ticker].dropna()
-            if closes.shape[1] == 1:
-                return closes.iloc[:, 0].dropna()
-        return closes.dropna()
-
-    return None
-
-
-def _parse_df(df, tickers):
-    result = {}
-    if df.empty:
-        return {t: None for t in tickers}
-
-    if len(tickers) == 1:
-        ticker = tickers[0]
-        try:
-            closes = _extract_close_series(df, ticker)
-            points = []
-            if closes is not None and hasattr(closes, "items"):
-                for date, close in closes.items():
-                    if pd.notna(close):
-                        points.append({"date": date.strftime("%Y-%m-%d"), "close": round(float(close), 4)})
-            result[ticker] = points if points else None
-        except Exception as e:
-            print(f"Error parsing single ticker {ticker}: {e}")
-            result[ticker] = None
-    else:
-        for ticker in tickers:
-            try:
-                closes = _extract_close_series(df, ticker)
-                if closes is None:
-                    result[ticker] = None
-                    continue
-                points = []
-                for date, close in closes.items():
-                    if pd.notna(close):
-                        points.append({"date": date.strftime("%Y-%m-%d"), "close": round(float(close), 4)})
-                result[ticker] = points if points else None
-            except Exception:
+                result[ticker] = future.result()
+            except Exception as exc:
+                failures.append(f"{ticker}: {type(exc).__name__}")
                 result[ticker] = None
+        if failures:
+            print(f"Yahoo chart failures ({len(failures)}): {', '.join(failures[:8])}")
+        if not_done:
+            print(f"Yahoo chart timed out for {len(not_done)} tickers")
+    finally:
+        executor.shutdown(wait=False, cancel_futures=True)
+
     return result
 
 
@@ -1055,7 +1048,7 @@ def fetch_prices(
     need_fetch = [ticker for ticker in uncached if ticker not in recent_failures]
 
     if need_fetch:
-        fresh = _download_prices_resilient(need_fetch)
+        fresh = _download_prices(need_fetch)
         _record_price_fetch_results(fresh)
         for ticker, data in fresh.items():
             result[ticker] = data
@@ -1069,7 +1062,7 @@ def fetch_prices(
     print(
         "price fetch "
         f"requested={len(tickers)} cache_hits={cache_hits} "
-        f"recent_failures={len(recent_failures)} yahoo_fetch={len(need_fetch)} "
+        f"recent_failures={len(recent_failures)} yahoo_chart_fetch={len(need_fetch)} "
         f"elapsed={elapsed:.2f}s"
     )
     return result
