@@ -3,15 +3,10 @@ __pycache__/
 *.py[cod]
 *.pyo
 *.egg-info/
-dist/
 build/
 *.egg
-
-# SQLite database (generated, not committed)
-data.db
-
-# yfinance HTTP cache
-.yf_cache.sqlite
+.pytest_cache/
+.ruff_cache/
 
 # IDE / Editor
 .vscode/
@@ -29,5 +24,7 @@ desktop.ini
 venv/
 .venv/
 env/
+
+# Node / frontend build
 node_modules/
 frontend/dist/
