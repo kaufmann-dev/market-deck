@@ -11,7 +11,13 @@
     <div class="panel-empty">No news available.</div>
   {:else}
     {#each news as item, index (`${item.link}-${index}`)}
-      <a class="news-item" href={item.link} target="_blank" rel="noreferrer">
+      <a
+        class="news-item"
+        class:no-thumb={!item.thumbnail}
+        href={item.link}
+        target="_blank"
+        rel="noreferrer"
+      >
         {#if item.thumbnail}
           <img src={item.thumbnail} alt="" loading="lazy" />
         {/if}
