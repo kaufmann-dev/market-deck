@@ -1663,21 +1663,29 @@ tr:hover td {
 
 .ed-ticker-row .ed-sym {
   width: 90px;
+  flex-shrink: 0;
 }
 
 .ed-ticker-row .ed-name {
-  flex: 1;
-  min-width: 80px;
+  flex: 1 1 100px;
+  min-width: 0;
 }
 
 .ed-ticker-row .ed-tag {
-  width: 120px;
-  min-width: 100px;
+  flex: 0 1 120px;
+  min-width: 60px;
 }
 
 .ed-ticker-row .ed-cur {
   width: 60px;
+  flex-shrink: 0;
   text-transform: uppercase;
+}
+
+.ed-ticker-row .ed-btn-save,
+.ed-ticker-row .ed-btn-del {
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .ed-btn-save {
