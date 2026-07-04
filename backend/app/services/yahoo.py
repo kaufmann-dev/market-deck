@@ -25,16 +25,8 @@ from . import yahoo_auth
 
 logger = logging.getLogger(__name__)
 
-_HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/125.0.0.0 Safari/537.36"
-    ),
-    "Accept": "application/json,text/plain,*/*",
-    "Accept-Language": "en-US,en;q=0.9",
-}
-_CHART_HEADERS = {"User-Agent": "Mozilla/5.0"}
+_HEADERS = {"User-Agent": "Mozilla/5.0"}
+_CHART_HEADERS = _HEADERS
 
 Series = list[dict]  # [{"date": "YYYY-MM-DD", "close": float}, ...]
 OhlcSeries = list[dict]  # [{"date": "YYYY-MM-DD", "open": float, ...}, ...]
@@ -278,7 +270,7 @@ def download_ohlc(symbol: str, range_: str = "1y", interval: str = "1d") -> dict
         return None
 
 
-def search_symbols(query: str) -> dict:
+def search_symbols(query: str) -> dict | None:
     params = {
         "q": query,
         "quotesCount": 8,
@@ -292,7 +284,7 @@ def search_symbols(query: str) -> dict:
             payload = response.json()
     except Exception as exc:
         logger.warning("Yahoo search failed for %s: %s", query, type(exc).__name__)
-        return {"quotes": [], "news": []}
+        return None
 
     quotes = [_normalize_quote(item) for item in payload.get("quotes") or []]
     news = [_normalize_news(item) for item in payload.get("news") or []]
@@ -328,7 +320,7 @@ def fetch_quote_summary(symbol: str, modules: list[str]) -> dict | None:
     return _simplify_yahoo_value(result[0])
 
 
-def fetch_news(symbol: str) -> dict:
+def fetch_news(symbol: str) -> dict | None:
     params = {"q": symbol, "quotesCount": 0, "newsCount": 12}
     try:
         with httpx.Client(headers=_HEADERS, timeout=PRICE_FETCH_TIMEOUT_SECONDS) as client:
@@ -337,7 +329,7 @@ def fetch_news(symbol: str) -> dict:
             payload = response.json()
     except Exception as exc:
         logger.warning("Yahoo news fetch failed for %s: %s", symbol, type(exc).__name__)
-        return {"news": []}
+        return None
     news = [_normalize_news(item) for item in payload.get("news") or []]
     return {"news": [item for item in news if item.get("title")]}
 

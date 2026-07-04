@@ -141,9 +141,11 @@ def search(
     settings = get_settings()
     key = f"search:{query.lower()}"
     cached = stock_cache.get_json(session, key, settings.search_cache_ttl_seconds)
-    if isinstance(cached, dict):
+    if isinstance(cached, dict) and (cached.get("quotes") or cached.get("news")):
         return cached
     data = yahoo.search_symbols(query)
+    if data is None:
+        return {"quotes": [], "news": []}
     stock_cache.set_json(session, key, data)
     return data
 
@@ -205,9 +207,11 @@ def stock_news(
     settings = get_settings()
     key = f"news:{normalized}"
     cached = stock_cache.get_json(session, key, settings.news_cache_ttl_seconds)
-    if isinstance(cached, dict):
+    if isinstance(cached, dict) and cached.get("news"):
         return cached
     data = yahoo.fetch_news(normalized)
+    if data is None:
+        return {"news": []}
     stock_cache.set_json(session, key, data)
     return data
 

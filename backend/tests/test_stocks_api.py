@@ -198,6 +198,52 @@ def test_search_shape(client, admin_headers):
     assert routes["search"].call_count == 1
 
 
+def test_search_upstream_failure_is_not_cached(client, admin_headers):
+    with respx.mock(assert_all_called=False) as mock:
+        search_route = mock.route(url__regex=SEARCH_URL)
+        calls = 0
+
+        def search_responder(request):
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                return httpx.Response(429, text="Too Many Requests")
+            return httpx.Response(200, json=search_payload())
+
+        search_route.side_effect = search_responder
+        first = client.get("/api/search?q=AAPL", headers=admin_headers)
+        second = client.get("/api/search?q=AAPL", headers=admin_headers)
+
+    assert first.status_code == 200
+    assert first.json() == {"quotes": [], "news": []}
+    assert second.status_code == 200
+    assert second.json()["quotes"][0]["symbol"] == "AAPL"
+    assert search_route.call_count == 2
+
+
+def test_empty_search_response_is_refetched(client, admin_headers):
+    with respx.mock(assert_all_called=False) as mock:
+        search_route = mock.route(url__regex=SEARCH_URL)
+        calls = 0
+
+        def search_responder(request):
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                return httpx.Response(200, json={"quotes": [], "news": []})
+            return httpx.Response(200, json=search_payload())
+
+        search_route.side_effect = search_responder
+        first = client.get("/api/search?q=AAPL", headers=admin_headers)
+        second = client.get("/api/search?q=AAPL", headers=admin_headers)
+
+    assert first.status_code == 200
+    assert first.json() == {"quotes": [], "news": []}
+    assert second.status_code == 200
+    assert second.json()["quotes"][0]["symbol"] == "AAPL"
+    assert search_route.call_count == 2
+
+
 def test_overview_with_fundamentals(client, admin_headers):
     with respx.mock(assert_all_called=False) as mock:
         install_yahoo_mocks(mock)
@@ -237,6 +283,52 @@ def test_chart_and_technicals(client, admin_headers):
     assert body["technicals"]["sma20"] == 349.5
     assert body["technicals"]["rsi14"] == 100.0
     assert routes["chart"].call_count == 1
+
+
+def test_news_upstream_failure_is_not_cached(client, admin_headers):
+    with respx.mock(assert_all_called=False) as mock:
+        news_route = mock.route(url__regex=SEARCH_URL)
+        calls = 0
+
+        def news_responder(request):
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                return httpx.Response(429, text="Too Many Requests")
+            return httpx.Response(200, json={"news": search_payload()["news"]})
+
+        news_route.side_effect = news_responder
+        first = client.get("/api/stocks/AAPL/news", headers=admin_headers)
+        second = client.get("/api/stocks/AAPL/news", headers=admin_headers)
+
+    assert first.status_code == 200
+    assert first.json() == {"news": []}
+    assert second.status_code == 200
+    assert second.json()["news"][0]["title"] == "Apple headline"
+    assert news_route.call_count == 2
+
+
+def test_empty_news_response_is_refetched(client, admin_headers):
+    with respx.mock(assert_all_called=False) as mock:
+        news_route = mock.route(url__regex=SEARCH_URL)
+        calls = 0
+
+        def news_responder(request):
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                return httpx.Response(200, json={"news": []})
+            return httpx.Response(200, json={"news": search_payload()["news"]})
+
+        news_route.side_effect = news_responder
+        first = client.get("/api/stocks/AAPL/news", headers=admin_headers)
+        second = client.get("/api/stocks/AAPL/news", headers=admin_headers)
+
+    assert first.status_code == 200
+    assert first.json() == {"news": []}
+    assert second.status_code == 200
+    assert second.json()["news"][0]["title"] == "Apple headline"
+    assert news_route.call_count == 2
 
 
 def test_second_call_hits_global_cache(client, admin_headers):
