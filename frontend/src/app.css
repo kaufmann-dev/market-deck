@@ -291,6 +291,7 @@ button .icon,
 .breadcrumb-btn,
 .edit-tickers-btn,
 .editor-close-btn,
+.editor-save-btn,
 .ed-btn-save,
 .tag-add-row button,
 .sig-buy,
@@ -1539,7 +1540,14 @@ tr:hover td {
   gap: 32px;
 }
 
-.editor-close-btn {
+.editor-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.editor-close-btn,
+.editor-save-btn {
   background: transparent;
   border: 1px solid var(--border-strong);
   color: var(--text-secondary);
@@ -1553,10 +1561,29 @@ tr:hover td {
   transition: var(--transition-fast);
 }
 
-.editor-close-btn:hover {
+.editor-close-btn:hover,
+.editor-save-btn:not(:disabled):hover {
   border-color: var(--text-primary);
   color: var(--text-primary);
   background: var(--bg-surface-elevated);
+}
+
+.editor-save-btn.is-dirty {
+  background: var(--text-primary);
+  border-color: var(--text-primary);
+  color: var(--bg-base);
+}
+
+.editor-save-btn.is-dirty:hover {
+  background: var(--text-primary);
+  color: var(--bg-base);
+  opacity: 0.85;
+}
+
+.editor-save-btn:disabled {
+  cursor: default;
+  color: var(--text-tertiary);
+  border-color: var(--border-subtle);
 }
 
 .editor-section {
@@ -2191,10 +2218,6 @@ tr:hover td {
   font-size: 10px;
   width: 24px;
   flex-shrink: 0;
-}
-
-.ed-btn-save.ed-btn-saved {
-  border-color: #38a169;
 }
 
 .ed-add-title {

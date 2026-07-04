@@ -19,7 +19,22 @@
   }
 
   let drafts = $state<Record<number, RowDraft>>({});
-  let savedIds = $state<Record<number, boolean>>({});
+  let saving = $state(false);
+  let savedFlash = $state(false);
+
+  const dirtyItems = $derived(
+    (list?.items ?? []).filter((item) => {
+      const d = drafts[item.id];
+      if (!d) return false;
+      return (
+        d.symbol !== item.ticker ||
+        d.name !== item.name ||
+        normalizeTag(d.tag) !== item.tag ||
+        d.currency !== item.currency
+      );
+    }),
+  );
+  const dirtyCount = $derived(dirtyItems.length);
 
   $effect(() => {
     const items = list?.items ?? [];
@@ -44,27 +59,39 @@
   let addTag = $state("");
   let addCurrency = $state("");
 
-  async function saveTicker(item: TickerItem) {
+  async function persist(item: TickerItem) {
     const draft = drafts[item.id];
     if (!draft) return;
-    try {
-      await putJson(`/api/tickers/${item.id}`, {
-        symbol: draft.symbol,
-        name: draft.name,
-        tag: draft.tag,
-        currency: draft.currency,
-      });
-      savedIds = { ...savedIds, [item.id]: true };
-      setTimeout(() => {
-        savedIds = { ...savedIds, [item.id]: false };
-      }, 800);
-      item.ticker = draft.symbol;
-      item.name = draft.name;
-      item.tag = normalizeTag(draft.tag);
-      item.currency = draft.currency;
-    } catch (e) {
-      alert("Error saving ticker: " + (e instanceof Error ? e.message : String(e)));
+    await putJson(`/api/tickers/${item.id}`, {
+      symbol: draft.symbol,
+      name: draft.name,
+      tag: draft.tag,
+      currency: draft.currency,
+    });
+    item.ticker = draft.symbol;
+    item.name = draft.name;
+    item.tag = normalizeTag(draft.tag);
+    item.currency = draft.currency;
+  }
+
+  async function saveAll() {
+    if (saving || dirtyCount === 0) return;
+    saving = true;
+    const failed: string[] = [];
+    for (const item of dirtyItems) {
+      try {
+        await persist(item);
+      } catch (e) {
+        failed.push(`${item.ticker}: ${e instanceof Error ? e.message : String(e)}`);
+      }
     }
+    saving = false;
+    if (failed.length) {
+      alert("Error saving tickers:\n" + failed.join("\n"));
+      return;
+    }
+    savedFlash = true;
+    setTimeout(() => (savedFlash = false), 1200);
   }
 
   async function deleteTicker(item: TickerItem) {
@@ -108,6 +135,7 @@
   }
 
   function close() {
+    if (dirtyCount > 0 && !confirm("Discard unsaved changes?")) return;
     // Edits may have changed symbols/currencies; refetch metrics for this list.
     app.invalidateMetrics(slug);
     void app.loadMetrics(slug);
@@ -120,9 +148,27 @@
   <div id="editor-panel">
     <div class="editor-header">
       <h2>Edit Tickers</h2>
-      <button onclick={close} class="editor-close-btn">
-        <X class="icon" aria-hidden="true" /> Close
-      </button>
+      <div class="editor-header-actions">
+        <button
+          onclick={saveAll}
+          class="editor-save-btn"
+          class:is-dirty={dirtyCount > 0}
+          disabled={saving || (dirtyCount === 0 && !savedFlash)}
+        >
+          {#if saving}
+            Saving…
+          {:else if savedFlash}
+            <Check class="icon" aria-hidden="true" /> Saved
+          {:else if dirtyCount > 0}
+            <Check class="icon" aria-hidden="true" /> Save {dirtyCount}
+          {:else}
+            <Check class="icon" aria-hidden="true" /> Save
+          {/if}
+        </button>
+        <button onclick={close} class="editor-close-btn">
+          <X class="icon" aria-hidden="true" /> Close
+        </button>
+      </div>
     </div>
 
     <div class="editor-section">
@@ -150,17 +196,6 @@
                   maxlength="3"
                   aria-label="Currency"
                 />
-                <button
-                  class="ed-btn-save"
-                  class:ed-btn-saved={savedIds[item.id]}
-                  onclick={() => saveTicker(item)}
-                >
-                  {#if savedIds[item.id]}
-                    <Check class="icon" aria-hidden="true" />
-                  {:else}
-                    Save
-                  {/if}
-                </button>
                 <button
                   class="ed-btn-del"
                   onclick={() => deleteTicker(item)}
