@@ -1992,6 +1992,16 @@ tr:hover td {
     padding: 20px;
   }
 
+  .holdings {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .hcard {
+    width: 100%;
+    justify-content: space-between;
+  }
+
   .edit-tickers-btn {
     margin-left: 0;
   }
