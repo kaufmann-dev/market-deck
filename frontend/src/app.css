@@ -2367,6 +2367,12 @@ tr.hm-row {
   border-color: var(--text-primary);
 }
 
+.search-input-wrap input::-webkit-search-cancel-button,
+.search-input-wrap input::-webkit-search-decoration {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
 .search-icon,
 .search-clear {
   position: absolute;
