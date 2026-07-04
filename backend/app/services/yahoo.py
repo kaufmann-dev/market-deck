@@ -18,6 +18,7 @@ from ..config import (
     PRICE_FETCH_TIMEOUT_SECONDS,
     PRICE_FETCH_TOTAL_TIMEOUT_SECONDS,
     YAHOO_CHART_BASE_URL,
+    YAHOO_FUNDAMENTALS_TIMESERIES_URL,
     YAHOO_QUOTE_SUMMARY_URL,
     YAHOO_SEARCH_URL,
 )
@@ -318,6 +319,68 @@ def fetch_quote_summary(symbol: str, modules: list[str]) -> dict | None:
     if not result or not isinstance(result[0], dict):
         return None
     return _simplify_yahoo_value(result[0])
+
+
+# Yahoo only serves fundamentals from roughly 1985 onward; this epoch is a safe floor.
+_FUNDAMENTALS_PERIOD1 = 493590046
+
+
+def fetch_fundamentals_timeseries(
+    symbol: str, types: list[str]
+) -> dict[str, list[dict]] | None:
+    """Fetch statement line items from Yahoo's fundamentals-timeseries endpoint.
+
+    Returns a mapping of Yahoo type name (e.g. ``annualTotalRevenue``) to a list
+    of ``{"date": "YYYY-MM-DD", "value": float | None}`` points, or ``None`` when
+    the request fails. The quoteSummary ``*History`` modules no longer populate
+    detailed line items, so this endpoint is the source for full statements.
+    """
+    if not types:
+        return {}
+    url = f"{YAHOO_FUNDAMENTALS_TIMESERIES_URL}/{quote(symbol, safe='')}"
+    params: dict[str, Any] = {
+        "symbol": symbol,
+        "type": ",".join(types),
+        "period1": _FUNDAMENTALS_PERIOD1,
+        "period2": int(datetime.now(UTC).timestamp()),
+        "merge": "false",
+    }
+    with httpx.Client(headers=_HEADERS, timeout=PRICE_FETCH_TIMEOUT_SECONDS) as client:
+        response = yahoo_auth.authed_get(client, url, params=params)
+    if response is None:
+        return None
+    if response.status_code >= 400:
+        logger.info(
+            "Yahoo fundamentals-timeseries unavailable for %s: status=%d",
+            symbol,
+            response.status_code,
+        )
+        return None
+
+    try:
+        payload = response.json()
+    except ValueError:
+        return None
+    timeseries = payload.get("timeseries") if isinstance(payload, dict) else None
+    if not isinstance(timeseries, dict) or timeseries.get("error"):
+        return None
+
+    out: dict[str, list[dict]] = {}
+    for block in timeseries.get("result") or []:
+        if not isinstance(block, dict):
+            continue
+        type_name = ((block.get("meta") or {}).get("type") or [None])[0]
+        if not type_name:
+            continue
+        points = []
+        for point in block.get(type_name) or []:
+            if not isinstance(point, dict):
+                continue
+            reported = point.get("reportedValue")
+            value = reported.get("raw") if isinstance(reported, dict) else reported
+            points.append({"date": point.get("asOfDate"), "value": value})
+        out[type_name] = points
+    return out
 
 
 def fetch_news(symbol: str) -> dict | None:

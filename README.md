@@ -193,7 +193,7 @@ DELETE /api/prices/cache
 
 Single-stock pages use a separate global PostgreSQL `yahoo_cache` table for chart, search, news, summary, and financial statement JSON payloads. These payloads are account-agnostic and do not change when the watchlist base currency changes; stock pages display native Yahoo currency.
 
-Yahoo fundamentals come from crumb-gated quoteSummary endpoints. If Yahoo rejects or fails the crumb flow, the app still returns chart, news, and technical data, with `fundamentalsAvailable: false`.
+Yahoo fundamentals are crumb-gated: the overview's profile and key statistics come from the quoteSummary endpoint, and the income/balance/cash-flow statements behind `/financials` come from the `fundamentals-timeseries` endpoint. If Yahoo rejects or fails the crumb flow, the app still returns chart, news, and technical data, with `fundamentalsAvailable: false` (and `financialsAvailable: false` for statements).
 
 ## Troubleshooting
 
