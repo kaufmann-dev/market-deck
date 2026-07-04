@@ -1,0 +1,17 @@
+[mcp_servers.svelte]
+url = "https://mcp.svelte.dev/mcp"
+enabled = true
+
+[mcp_servers.context7]
+url = "https://mcp.context7.com/mcp"
+enabled = true
+
+[mcp_servers.playwright]
+command = "npx"
+args = ["@playwright/mcp@latest", "--browser", "chromium"]
+enabled = true
+
+[mcp_servers.postgres]
+command = "npx"
+args = ["@modelcontextprotocol/server-postgres", "${DATABASE_URL}"]
+enabled = false
