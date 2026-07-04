@@ -41,10 +41,20 @@
     </thead>
     <tbody>
       {#each rows as row (row.id)}
-        <tr class:row-buy={isBuy(row)}>
+        <tr class="clickable-row" class:row-buy={isBuy(row)} onclick={() => app.openStock(row.ticker)}>
           <td><span class="rb {rankClass(row)}">{row.rank}</span></td>
           <td><div class="cell-name"><span>{row.name}</span></div></td>
-          <td><span class="ticker">{row.ticker}</span></td>
+          <td>
+            <button
+              class="ticker stock-link"
+              onclick={(event) => {
+                event.stopPropagation();
+                app.openStock(row.ticker);
+              }}
+            >
+              {row.ticker}
+            </button>
+          </td>
           {#if showTag}
             <td><span class="tag" style={tagStyle(row.tag, list)}>{row.tag}</span></td>
           {/if}

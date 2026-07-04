@@ -27,11 +27,19 @@
     </thead>
     <tbody>
       {#each rows as row (row.id)}
-        <tr class="hm-row" class:row-buy={isBuy(row)}>
+        <tr class="hm-row clickable-row" class:row-buy={isBuy(row)} onclick={() => app.openStock(row.ticker)}>
           <td class="hm-name-cell">
             <div class="cell-name">
               <div>
-                <div class="ticker hm-ticker">{row.ticker}</div>
+                <button
+                  class="ticker hm-ticker stock-link"
+                  onclick={(event) => {
+                    event.stopPropagation();
+                    app.openStock(row.ticker);
+                  }}
+                >
+                  {row.ticker}
+                </button>
                 <div class="hm-name-sub">{row.name}</div>
               </div>
             </div>

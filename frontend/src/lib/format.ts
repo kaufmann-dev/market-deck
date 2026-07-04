@@ -35,6 +35,43 @@ export function currencySymbol(currency: string): string {
   }
 }
 
+export function formatMoney(value: number | null | undefined, currency = "USD"): string {
+  if (value === null || value === undefined || !Number.isFinite(value)) return "—";
+  try {
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency,
+      maximumFractionDigits: value >= 100 ? 0 : 2,
+    }).format(value);
+  } catch {
+    return `${currency} ${value.toFixed(2)}`;
+  }
+}
+
+export function formatNumber(value: number | null | undefined, digits = 2): string {
+  if (value === null || value === undefined || !Number.isFinite(value)) return "—";
+  return new Intl.NumberFormat("en-US", {
+    maximumFractionDigits: digits,
+  }).format(value);
+}
+
+export function formatLargeNumber(value: number | null | undefined): string {
+  if (value === null || value === undefined || !Number.isFinite(value)) return "—";
+  return new Intl.NumberFormat("en-US", {
+    notation: "compact",
+    maximumFractionDigits: 2,
+  }).format(value);
+}
+
+export function formatUnixDate(value: number | null | undefined): string {
+  if (!value) return "";
+  return new Date(value * 1000).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
 export function tagStyle(tag: string, list: ListInfo | null): string {
   const info = sortedTags(list).find((item) => item.tag === normalizeTag(tag));
   if (info) return `background:${info.bg};color:${info.text};border:1px solid ${info.border}`;

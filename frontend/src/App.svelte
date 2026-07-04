@@ -6,8 +6,10 @@
   import Sidebar from "./lib/components/Sidebar.svelte";
   import HomeView from "./lib/components/HomeView.svelte";
   import ListView from "./lib/components/ListView.svelte";
+  import StockView from "./lib/components/StockView.svelte";
   import { app } from "./lib/stores/app.svelte";
   import { auth } from "./lib/stores/auth.svelte";
+  import { router } from "./lib/stores/router.svelte";
 
   let mobileNavOpen = $state(false);
 
@@ -23,12 +25,19 @@
     void (async () => {
       if (await auth.restore()) {
         await app.loadInit();
+        app.syncRoute(router.route);
       }
     })();
   });
 
+  $effect(() => {
+    if (!loggedIn) return;
+    app.syncRoute(router.route);
+  });
+
   async function handleLoggedIn() {
     await app.loadInit();
+    app.syncRoute(router.route);
   }
 
   function handleLogout() {
@@ -46,10 +55,12 @@
   <Sidebar bind:mobileNavOpen />
   <div class="main">
     <SessionBar onLogout={handleLogout} />
-    {#if app.currentView === "home"}
+    {#if router.route.name === "home"}
       <HomeView />
-    {:else}
+    {:else if router.route.name === "list"}
       <ListView />
+    {:else}
+      <StockView symbol={router.route.params.symbol} />
     {/if}
     <LegalLinks class="app-legal-links" />
   </div>

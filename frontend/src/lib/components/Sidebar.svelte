@@ -1,6 +1,8 @@
 <script lang="ts">
   import type { ListInfo } from "../api/types";
   import { app, normalizeCategory } from "../stores/app.svelte";
+  import { router } from "../stores/router.svelte";
+  import SearchBox from "./SearchBox.svelte";
 
   let { mobileNavOpen = $bindable(false) }: { mobileNavOpen?: boolean } = $props();
 
@@ -32,15 +34,16 @@
 </script>
 
 <nav class="sidebar" class:open={mobileNavOpen}>
-  <button class="sidebar-home-btn" class:active={app.currentView === "home"} onclick={goHome}>
+  <button class="sidebar-home-btn" class:active={router.route.name === "home"} onclick={goHome}>
     Market Deck
   </button>
+  <SearchBox onSelect={() => (mobileNavOpen = false)} />
   {#each groups as group (group.label)}
     <div class="sidebar-section">{group.label}</div>
     {#each group.items as { slug, list } (slug)}
       <button
         class="list-btn"
-        class:active={app.activeList === slug && app.currentView === "list"}
+        class:active={router.route.name === "list" && router.route.params.slug === slug}
         onclick={() => openList(slug)}
       >
         <span>{list.shortName}</span>

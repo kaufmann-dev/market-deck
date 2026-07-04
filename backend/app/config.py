@@ -19,6 +19,10 @@ PRICE_FETCH_TOTAL_TIMEOUT_SECONDS = 5
 PRICE_FAILURE_COOLDOWN_SECONDS = 300
 PRICE_HISTORY_DAYS = 430
 YAHOO_CHART_BASE_URL = "https://query1.finance.yahoo.com/v8/finance/chart"
+YAHOO_SEARCH_URL = "https://query1.finance.yahoo.com/v1/finance/search"
+YAHOO_QUOTE_SUMMARY_URL = "https://query2.finance.yahoo.com/v10/finance/quoteSummary"
+YAHOO_CRUMB_URL = "https://query1.finance.yahoo.com/v1/test/getcrumb"
+YAHOO_COOKIE_URL = "https://fc.yahoo.com/"
 
 
 class Settings(BaseSettings):
@@ -30,6 +34,16 @@ class Settings(BaseSettings):
     db_connect_retries: int = Field(default=30, validation_alias="MARKETDECK_DB_CONNECT_RETRIES")
     db_connect_retry_delay: float = Field(default=2.0, validation_alias="MARKETDECK_DB_CONNECT_RETRY_DELAY")
     price_cache_ttl_seconds: int = Field(default=3600, validation_alias="MARKETDECK_PRICE_CACHE_TTL_SECONDS")
+    stock_chart_cache_ttl_seconds: int = Field(
+        default=900, validation_alias="MARKETDECK_STOCK_CHART_CACHE_TTL_SECONDS"
+    )
+    fundamentals_cache_ttl_seconds: int = Field(
+        default=21600, validation_alias="MARKETDECK_FUNDAMENTALS_CACHE_TTL_SECONDS"
+    )
+    news_cache_ttl_seconds: int = Field(default=900, validation_alias="MARKETDECK_NEWS_CACHE_TTL_SECONDS")
+    search_cache_ttl_seconds: int = Field(
+        default=3600, validation_alias="MARKETDECK_SEARCH_CACHE_TTL_SECONDS"
+    )
     static_dir: Path = Field(
         default=REPO_ROOT / "frontend" / "dist", validation_alias="MARKETDECK_STATIC_DIR"
     )

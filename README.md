@@ -28,7 +28,8 @@ Dashboard for displaying financial asset information — live prices, FX convers
 - JWT login/session restore.
 - Server-side authorization for all write endpoints.
 - Server-side metrics: FX conversion, lookback returns, and monthly heatmap data computed on the backend.
-- In-memory rate limit on the metrics endpoint.
+- Single-stock dashboards with shareable `/stock/{symbol}` URLs, global Yahoo symbol search, native-currency charts, fundamentals, technicals, news, and analyst readouts.
+- In-memory rate limits on Yahoo-backed read endpoints.
 - Coolify/Nixpacks deployment files:
   - `.python-version`, `.nvmrc`
   - `requirements.txt`
@@ -91,6 +92,10 @@ Optional:
 MARKETDECK_DB_CONNECT_RETRIES=30
 MARKETDECK_DB_CONNECT_RETRY_DELAY=2
 MARKETDECK_PRICE_CACHE_TTL_SECONDS=3600
+MARKETDECK_STOCK_CHART_CACHE_TTL_SECONDS=900
+MARKETDECK_FUNDAMENTALS_CACHE_TTL_SECONDS=21600
+MARKETDECK_NEWS_CACHE_TTL_SECONDS=900
+MARKETDECK_SEARCH_CACHE_TTL_SECONDS=3600
 MARKETDECK_STATIC_DIR=frontend/dist
 PORT=8000
 ```
@@ -155,9 +160,14 @@ Demo users can browse data and fetch prices, but write endpoints return `403`.
 
 ### Rate Limiting
 
-Rate limiting is in memory and only protects the metrics endpoint (the one that fetches from Yahoo Finance):
+Rate limiting is in memory and protects Yahoo-backed read endpoints:
 
 - `GET /api/lists/{slug}/metrics`: `120/minute`
+- `GET /api/search`: `120/minute`
+- `GET /api/stocks/{symbol}`: `120/minute`
+- `GET /api/stocks/{symbol}/chart`: `120/minute`
+- `GET /api/stocks/{symbol}/news`: `120/minute`
+- `GET /api/stocks/{symbol}/financials`: `120/minute`
 
 The in-process rate limit and the price-fetch failure cooldown are per-process, so the app assumes a single instance. If you scale horizontally, move both to a shared backend such as Redis.
 
@@ -178,6 +188,12 @@ Admins can clear the server-side cache and failure cooldown through:
 ```text
 DELETE /api/prices/cache
 ```
+
+### Stock Data Cache
+
+Single-stock pages use a separate global PostgreSQL `yahoo_cache` table for chart, search, news, summary, and financial statement JSON payloads. These payloads are account-agnostic and do not change when the watchlist base currency changes; stock pages display native Yahoo currency.
+
+Yahoo fundamentals come from crumb-gated quoteSummary endpoints. If Yahoo rejects or fails the crumb flow, the app still returns chart, news, and technical data, with `fundamentalsAvailable: false`.
 
 ## Troubleshooting
 
@@ -269,6 +285,11 @@ Authenticated admin or demo:
 - `GET /api/init`
 - `GET /api/settings`
 - `GET /api/lists/{slug}/metrics` — server-computed returns/heatmap; optional `?base=CUR` override
+- `GET /api/search?q=QUERY` — Yahoo symbol/news search
+- `GET /api/stocks/{symbol}` — stock overview and quoteSummary-backed fundamentals when available
+- `GET /api/stocks/{symbol}/chart?range=1y&interval=1d` — OHLCV, meta, and server-computed technicals
+- `GET /api/stocks/{symbol}/news`
+- `GET /api/stocks/{symbol}/financials`
 
 Admin only:
 
