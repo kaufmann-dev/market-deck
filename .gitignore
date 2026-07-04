@@ -29,3 +29,5 @@ desktop.ini
 venv/
 .venv/
 env/
+node_modules/
+frontend/dist/

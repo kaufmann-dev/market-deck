@@ -87,10 +87,6 @@ body {
   display: none;
 }
 
-.auth-ready #login-view {
-  display: none;
-}
-
 .login-view {
   width: 100vw;
   min-height: 100vh;
@@ -950,7 +946,7 @@ select option:checked {
 }
 
 /* ─── Controls & Status ─── */
-#status-bar {
+.status-bar {
   display: flex;
   align-items: center;
   gap: 12px;
@@ -1026,7 +1022,8 @@ select option:checked {
   padding: 16px 0 24px;
 }
 
-.cg label {
+.cg label,
+.cg .cg-label {
   display: block;
   font-size: 10px;
   text-transform: uppercase;
@@ -1731,10 +1728,10 @@ tr:hover td {
   color: var(--text-primary);
 }
 
-#ed-add-symbol,
-#ed-add-name,
-#ed-add-tag,
-#ed-add-cur {
+.ed-add-symbol,
+.ed-add-name,
+.ed-add-tag,
+.ed-add-cur {
   padding: 10px 16px;
   background: transparent;
   border: 1px solid var(--border-subtle);
@@ -1745,14 +1742,14 @@ tr:hover td {
   transition: var(--transition-fast);
 }
 
-#ed-add-tag {
+.ed-add-tag {
   min-width: 120px;
 }
 
-#ed-add-symbol:focus,
-#ed-add-name:focus,
-#ed-add-tag:focus,
-#ed-add-cur:focus {
+.ed-add-symbol:focus,
+.ed-add-name:focus,
+.ed-add-tag:focus,
+.ed-add-cur:focus {
   outline: none;
   border-color: var(--text-primary);
 }
@@ -2145,4 +2142,177 @@ tr:hover td {
 .ef-row label {
   text-align: left;
   min-width: unset;
+}
+
+/* ─── Component classes replacing legacy inline styles ─── */
+.modal-overlay,
+.editor-overlay-root {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+}
+
+.modal-backdrop,
+.editor-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, .6);
+  backdrop-filter: blur(4px);
+}
+
+.editor-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.editor-header h2 {
+  font-size: 18px;
+  color: #f7fafc;
+  font-weight: 600;
+}
+
+.editor-list-name {
+  color: #63b3ed;
+}
+
+.ed-row-index {
+  color: #4a5568;
+  font-size: 10px;
+  width: 24px;
+  flex-shrink: 0;
+}
+
+.ed-btn-save.ed-btn-saved {
+  border-color: #38a169;
+}
+
+.ed-add-title {
+  margin-bottom: 10px;
+}
+
+.ed-add-fields {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.ed-add-symbol {
+  width: 90px;
+}
+
+.ed-add-name {
+  flex: 1;
+  min-width: 100px;
+}
+
+.ed-add-cur {
+  width: 60px;
+}
+
+.ed-add-btn {
+  white-space: nowrap;
+}
+
+.hcard-ticker {
+  font-weight: 400;
+  font-size: 14px;
+  color: #68d391;
+}
+
+.hcard-name {
+  font-size: 11px;
+  color: #718096;
+}
+
+.hcard-score {
+  font-family: 'Google Sans Code', monospace;
+  font-size: 13px;
+  margin-left: 8px;
+}
+
+.cell-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ret-value {
+  font-weight: 400;
+}
+
+.price-cell {
+  color: #a0aec0;
+}
+
+tr.row-buy {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.cg-right {
+  margin-left: auto;
+}
+
+/* ─── Heatmap table (previously inline styles) ─── */
+.hm-th {
+  font-family: 'Google Sans Code', monospace;
+  background: transparent;
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 10px;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+}
+
+.hm-th-name {
+  padding: 16px 20px;
+  text-align: left;
+  letter-spacing: .15em;
+  min-width: 165px;
+}
+
+.hm-th-month {
+  padding: 16px 6px;
+  text-align: center;
+  min-width: 48px;
+}
+
+.hm-th-12m {
+  padding: 16px 10px;
+  text-align: center;
+  letter-spacing: .15em;
+  color: var(--accent-positive);
+}
+
+tr.hm-row {
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.hm-name-cell {
+  padding: 14px 20px;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.hm-ticker {
+  font-size: 12px;
+}
+
+.hm-name-sub {
+  font-size: 11px;
+  color: #4a5568;
+}
+
+.hm-no-data {
+  text-align: center;
+  color: #4a5568;
+  font-size: 12px;
+  padding: 10px;
+}
+
+.hm-12m-cell {
+  padding: 14px 20px;
+  text-align: center;
+  border-bottom: 1px solid var(--border-subtle);
+  font-family: 'Google Sans Code', monospace;
+  font-size: 12px;
 }
