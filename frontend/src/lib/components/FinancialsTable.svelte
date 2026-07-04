@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { formatLargeNumber, formatNumber } from "../format";
+  import { formatLargeNumber, formatNumber, formatUnixDate } from "../format";
 
   let {
     caption,
@@ -23,12 +23,25 @@
       .replace(/^./, (value) => value.toUpperCase());
   }
 
-  function display(value: unknown): string {
+  function isDateKey(key: string): boolean {
+    return /date/i.test(key);
+  }
+
+  function display(key: string, value: unknown): string {
     if (value === null || value === undefined) return "—";
-    if (typeof value === "number") return Math.abs(value) >= 100000 ? formatLargeNumber(value) : formatNumber(value);
+    if (typeof value === "object") {
+      const raw = (value as { raw?: unknown }).raw;
+      if (raw !== undefined) return display(key, raw);
+      const fmt = (value as { fmt?: unknown }).fmt;
+      if (fmt !== undefined && fmt !== null) return String(fmt);
+      return "—";
+    }
+    if (typeof value === "number") {
+      if (isDateKey(key)) return formatUnixDate(value);
+      return Math.abs(value) >= 100000 ? formatLargeNumber(value) : formatNumber(value);
+    }
     if (typeof value === "string") return value;
-    if (typeof value === "object" && "fmt" in value) return String((value as { fmt?: unknown }).fmt ?? "—");
-    return String(value);
+    return "—";
   }
 </script>
 
@@ -51,7 +64,7 @@
         {#each rows as row, index (index)}
           <tr>
             {#each columns as column (column)}
-              <td class:mono={typeof row[column] === "number"}>{display(row[column])}</td>
+              <td class:mono={typeof row[column] === "number"}>{display(column, row[column])}</td>
             {/each}
           </tr>
         {/each}
