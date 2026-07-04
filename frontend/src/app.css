@@ -2685,6 +2685,10 @@ tr.clickable-row {
   border-bottom: 1px solid var(--border-subtle);
 }
 
+.news-item.no-thumb {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
 .news-item:last-child {
   border-bottom: 0;
 }
