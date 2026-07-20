@@ -13,9 +13,11 @@ Two terminals. Backend (needs PostgreSQL running):
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements-dev.txt   # runtime + pytest/ruff/respx/testcontainers
 export DATABASE_URL="postgresql://user:password@localhost:5432/marketdeck"
-export MARKETDECK_JWT_SECRET="$(openssl rand -hex 32)"
-export MARKETDECK_ADMIN_EMAIL="admin@example.com"
-export MARKETDECK_ADMIN_PASSWORD="change-me"
+export MARKETDECK_PUBLIC_URL="http://localhost:5173"
+export MARKETDECK_OIDC_ISSUER_URL="https://identity.example.com/application/o/market-deck"
+export MARKETDECK_OIDC_CLIENT_ID="market-deck-local"
+export MARKETDECK_OIDC_CLIENT_SECRET="set-locally"
+export MARKETDECK_OIDC_STATE_SECRET="$(openssl rand -hex 32)"
 cd backend && python -m app.migrate && uvicorn app.main:app --reload
 ```
 Frontend (Vite dev server proxies `/api` → `localhost:8000`):
@@ -32,14 +34,14 @@ For a production-like run, `npm run build` then open the uvicorn port (8000) dir
 - For browser interaction and UI testing, use the Playwright MCP server when explicitly requested or genuinely necessary. Do not use the Playwright CLI as a substitute.
 
 ## Environment variables
-Required: `DATABASE_URL`, `MARKETDECK_JWT_SECRET`, `MARKETDECK_ADMIN_EMAIL`, `MARKETDECK_ADMIN_PASSWORD` (pydantic-settings raises on startup if missing).
+Required: `DATABASE_URL`, `MARKETDECK_PUBLIC_URL`, `MARKETDECK_OIDC_ISSUER_URL`, `MARKETDECK_OIDC_CLIENT_ID`, `MARKETDECK_OIDC_CLIENT_SECRET`, `MARKETDECK_OIDC_STATE_SECRET` (pydantic-settings raises on startup if missing).
 Optional: `MARKETDECK_DB_CONNECT_RETRIES` (30), `MARKETDECK_DB_CONNECT_RETRY_DELAY` (2), `MARKETDECK_PRICE_CACHE_TTL_SECONDS` (3600), `MARKETDECK_STOCK_CHART_CACHE_TTL_SECONDS` (900), `MARKETDECK_FUNDAMENTALS_CACHE_TTL_SECONDS` (21600), `MARKETDECK_NEWS_CACHE_TTL_SECONDS` (900), `MARKETDECK_SEARCH_CACHE_TTL_SECONDS` (3600), `MARKETDECK_STATIC_DIR` (defaults to `frontend/dist`), `PORT` (8000).
 `DATABASE_URL` accepts `postgres://` / `postgresql://` and is normalized to `postgresql+psycopg2://` in `config.py`.
 
 ## Database & migrations
 - **Alembic** owns the schema (`backend/alembic/versions/`). `app/migrate.py` runs on startup: upgrades if already Alembic-managed; **stamps `0001` then upgrades** a legacy pre-Alembic DB (detected by an existing `watchlists` table with no `alembic_version`); runs all migrations on a fresh DB.
 - New schema change: edit `app/models.py`, then `cd backend && alembic revision --autogenerate -m "..."`, review the generated file, commit it.
-- Seeding (`app/seed.py`, runs after migrations in the lifespan): admin + demo users are idempotent (`ON CONFLICT DO NOTHING`); watchlist/ticker/tag data seeds **only when `watchlists` is empty**. Editing `seed_data.py` does not re-seed an existing DB.
+- Seeding (`app/seed.py`, runs after migrations in the lifespan): watchlist/ticker/tag data seeds **only when `watchlists` is empty**. Authentication records are never seeded; OIDC identities stay provider-owned and demo sessions are created on demand. Editing `seed_data.py` does not re-seed an existing DB.
 
 ## Metrics / business logic
 - All FX conversion and return math lives server-side in `app/services/metrics.py` (pure functions, injectable `today`). It is a faithful port of the old client math — see the module docstring for the two preserved quirks (JS-style month rollover, USX cents). `GET /api/lists/{slug}/metrics?base=CUR` returns computed lookbacks/monthly/currentPrice; the frontend only ranks (`src/lib/scoring.ts`) and renders.

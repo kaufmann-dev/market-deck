@@ -1,20 +1,12 @@
 """Pydantic request/response models."""
+from typing import Literal
+
 from pydantic import BaseModel
 
 
 class CurrentUser(BaseModel):
-    email: str
-    role: str
-
-
-class LoginRequest(BaseModel):
-    email: str
-    password: str
-
-
-class PasswordChangeRequest(BaseModel):
-    current_password: str
-    new_password: str
+    role: Literal["admin", "demo"]
+    display_name: str | None = None
 
 
 class SettingUpdate(BaseModel):

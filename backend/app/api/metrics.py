@@ -22,9 +22,9 @@ router = APIRouter(prefix="/api")
 DEFAULT_BASE_CURRENCY = "EUR"
 
 
-def _load_series(session: Session, account_email: str, symbols: list[str]) -> dict:
+def _load_series(session: Session, account_key: str, symbols: list[str]) -> dict:
     """Cache-first load of price series; fetches misses from Yahoo in parallel."""
-    result = price_cache.get_cached_prices(session, account_email, symbols)
+    result = price_cache.get_cached_prices(session, account_key, symbols)
     cache_hits = len(result)
     uncached = [symbol for symbol in symbols if symbol not in result]
     recent_failures = set(price_cache.recent_failed_tickers(uncached))
@@ -36,7 +36,7 @@ def _load_series(session: Session, account_email: str, symbols: list[str]) -> di
         fresh = yahoo.download_prices(need_fetch)
         price_cache.record_fetch_results(fresh)
         result.update(fresh)
-        price_cache.set_cached_prices(session, account_email, fresh)
+        price_cache.set_cached_prices(session, account_key, fresh)
 
     logger.info(
         "price load requested=%d cache_hits=%d recent_failures=%d yahoo_chart_fetch=%d",
@@ -70,8 +70,8 @@ def list_metrics(
     stock_symbols = price_cache.unique_symbols([t.symbol for t in watchlist.tickers])
     fx_symbols = required_fx_symbols([t.currency for t in watchlist.tickers], base_currency)
 
-    account_email = price_cache.account_cache_key(current_user)
-    series = _load_series(session, account_email, stock_symbols + fx_symbols)
+    account_key = price_cache.account_cache_key(current_user)
+    series = _load_series(session, account_key, stock_symbols + fx_symbols)
 
     today = datetime.now(UTC).date()
     tickers = []

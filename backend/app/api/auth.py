@@ -1,15 +1,29 @@
-"""Authentication endpoints."""
-import logging
+"""OIDC admin authentication and anonymous demo-session endpoints."""
 
-from fastapi import APIRouter, Depends, HTTPException, Request
-from slowapi.util import get_remote_address
-from sqlalchemy import select, text, update
+import logging
+from collections.abc import Mapping
+
+import httpx
+from authlib.integrations.base_client import OAuthError
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi.responses import JSONResponse, PlainTextResponse, RedirectResponse
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from ..config import APP_SESSION_COOKIE, get_settings
 from ..db import get_session
-from ..models import User
-from ..schemas import CurrentUser, LoginRequest, PasswordChangeRequest
-from ..security import create_access_token, get_current_user, hash_password, require_admin, verify_password
+from ..oidc import callback_url, get_oidc_client, post_logout_url
+from ..schemas import CurrentUser
+from ..security import (
+    clear_session_cookie,
+    create_auth_session,
+    get_current_user,
+    load_auth_session,
+    pop_auth_session,
+    require_same_origin,
+    set_session_cookie,
+    touch_current_user_activity,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -22,50 +36,121 @@ def demo_info(session: Session = Depends(get_session)):
     return {"demoLogin": True}
 
 
-@router.post("/login")
-def login(request: Request, body: LoginRequest, session: Session = Depends(get_session)):
-    user = session.scalars(select(User).where(User.email == body.email)).first()
+@router.get("/login")
+async def login(request: Request):
+    return await get_oidc_client().authorize_redirect(request, callback_url())
 
-    if not user or user.role == "demo" or not verify_password(body.password, user.password_hash):
-        logger.warning("failed login: email=%s ip=%s", body.email, get_remote_address(request))
-        raise HTTPException(401, "Invalid email or password")
 
-    token = create_access_token(user.email, user.role)
-    return {"token": token, "email": user.email, "role": user.role}
+@router.get("/callback")
+async def callback(request: Request, session: Session = Depends(get_session)):
+    try:
+        token = await get_oidc_client().authorize_access_token(request)
+    except OAuthError as exc:
+        request.session.clear()
+        logger.warning("OIDC callback failed: %s", exc.error)
+        raise HTTPException(400, "OIDC authentication failed") from None
+
+    userinfo = token.get("userinfo")
+    id_token = token.get("id_token")
+    subject = userinfo.get("sub") if isinstance(userinfo, Mapping) else None
+    if not isinstance(subject, str) or not subject or not isinstance(id_token, str) or not id_token:
+        request.session.clear()
+        raise HTTPException(400, "OIDC provider returned an invalid identity")
+
+    display_name = next(
+        (
+            value
+            for value in (
+                userinfo.get("email"),
+                userinfo.get("preferred_username"),
+                userinfo.get("name"),
+                subject,
+            )
+            if isinstance(value, str) and value
+        ),
+        subject,
+    )
+    raw_token = create_auth_session(
+        session,
+        role="admin",
+        subject=subject,
+        display_name=display_name,
+        id_token=id_token,
+        replace_token=request.cookies.get(APP_SESSION_COOKIE),
+    )
+    request.session.clear()
+    response = RedirectResponse(f"{get_settings().public_url}/", status_code=303)
+    set_session_cookie(response, raw_token)
+    return response
 
 
 @router.post("/demo-login")
 def demo_login(request: Request, session: Session = Depends(get_session)):
-    user = session.scalars(select(User).where(User.role == "demo").order_by(User.id).limit(1)).first()
-
-    if not user:
-        logger.warning("failed demo login: demo user missing ip=%s", get_remote_address(request))
-        raise HTTPException(503, "Demo login is temporarily unavailable")
-
-    token = create_access_token("demo", user.role)
-    return {"token": token, "role": user.role}
+    require_same_origin(request)
+    raw_token = create_auth_session(
+        session,
+        role="demo",
+        replace_token=request.cookies.get(APP_SESSION_COOKIE),
+    )
+    response = JSONResponse({"role": "demo"})
+    set_session_cookie(response, raw_token)
+    return response
 
 
 @router.get("/me")
 def me(current_user: CurrentUser = Depends(get_current_user)):
-    if current_user.role == "demo":
-        return {"role": current_user.role}
-    return {"email": current_user.email, "role": current_user.role}
+    response = {"role": current_user.role}
+    if current_user.role == "admin" and current_user.display_name:
+        response["displayName"] = current_user.display_name
+    return response
 
 
-@router.put("/password")
-def change_password(
-    body: PasswordChangeRequest,
-    current_user: CurrentUser = Depends(require_admin),
-    session: Session = Depends(get_session),
-):
-    user = session.scalars(select(User).where(User.email == current_user.email)).first()
-    if not user or not verify_password(body.current_password, user.password_hash):
-        raise HTTPException(400, "Current password is incorrect")
-    session.execute(
-        update(User)
-        .where(User.email == current_user.email)
-        .values(password_hash=hash_password(body.new_password))
+@router.post("/activity", status_code=204)
+def activity(_current_user: CurrentUser = Depends(touch_current_user_activity)):
+    return Response(status_code=204)
+
+
+@router.post("/logout")
+async def logout(request: Request, session: Session = Depends(get_session)):
+    require_same_origin(request)
+    raw_token = request.cookies.get(APP_SESSION_COOKIE)
+    auth_session = load_auth_session(session, raw_token)
+    id_token = (
+        auth_session.id_token
+        if auth_session and auth_session.role == "admin" and auth_session.id_token
+        else None
     )
-    session.commit()
-    return {"ok": True}
+    pop_auth_session(session, raw_token)
+    request.session.clear()
+
+    if id_token:
+        try:
+            response = await get_oidc_client().logout_redirect(
+                request,
+                post_logout_redirect_uri=post_logout_url(),
+                id_token_hint=id_token,
+                client_id=get_settings().oidc_client_id,
+            )
+            response.status_code = 303
+        except (OAuthError, httpx.HTTPError, RuntimeError, ValueError):
+            logger.warning("OIDC RP-initiated logout failed after the local session was removed")
+            response = PlainTextResponse(
+                "Signed out locally, but the identity provider logout failed.",
+                status_code=502,
+            )
+    else:
+        response = RedirectResponse(f"{get_settings().public_url}/", status_code=303)
+
+    clear_session_cookie(response)
+    return response
+
+
+@router.get("/logged-out")
+async def logged_out(request: Request):
+    try:
+        await get_oidc_client().validate_logout_response(request)
+    except OAuthError:
+        request.session.clear()
+        raise HTTPException(400, "OIDC logout response was invalid") from None
+    request.session.clear()
+    return RedirectResponse(f"{get_settings().public_url}/", status_code=303)

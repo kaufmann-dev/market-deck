@@ -33,10 +33,10 @@ def unique_symbols(symbols: list[str]) -> list[str]:
 def account_cache_key(current_user: CurrentUser) -> str:
     if current_user.role == "demo":
         return "demo"
-    return current_user.email.strip().lower()
+    return "admin"
 
 
-def get_cached_prices(session: Session, account_email: str, tickers: list[str]) -> dict[str, Series]:
+def get_cached_prices(session: Session, account_key: str, tickers: list[str]) -> dict[str, Series]:
     if not tickers:
         return {}
 
@@ -45,7 +45,7 @@ def get_cached_prices(session: Session, account_email: str, tickers: list[str]) 
     session.execute(delete(PriceCache).where(PriceCache.cached_at < cutoff))
     rows = session.execute(
         select(PriceCache.ticker, PriceCache.data).where(
-            PriceCache.account_email == account_email,
+            PriceCache.account_key == account_key,
             PriceCache.ticker.in_(tickers),
             PriceCache.cached_at >= cutoff,
         )
@@ -55,21 +55,21 @@ def get_cached_prices(session: Session, account_email: str, tickers: list[str]) 
     return {row.ticker: row.data for row in rows if is_valid_series(row.data)}
 
 
-def set_cached_prices(session: Session, account_email: str, price_data: dict[str, Series | None]) -> None:
+def set_cached_prices(session: Session, account_key: str, price_data: dict[str, Series | None]) -> None:
     cacheable = {ticker: data for ticker, data in price_data.items() if is_valid_series(data)}
     if not cacheable:
         return
 
     for ticker, data in cacheable.items():
         stmt = pg_insert(PriceCache).values(
-            account_email=account_email,
+            account_key=account_key,
             ticker=ticker,
             data=data,
             cached_at=datetime.now(UTC),
         )
         session.execute(
             stmt.on_conflict_do_update(
-                index_elements=["account_email", "ticker"],
+                index_elements=["account_key", "ticker"],
                 set_={"data": stmt.excluded.data, "cached_at": stmt.excluded.cached_at},
             )
         )

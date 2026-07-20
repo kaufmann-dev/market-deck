@@ -1,4 +1,4 @@
-"""ORM models mirroring the production schema (see alembic/versions/0001_initial.py)."""
+"""ORM models for the Alembic-managed production schema."""
 from datetime import datetime
 
 from sqlalchemy import (
@@ -8,6 +8,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    String,
     Text,
     UniqueConstraint,
     func,
@@ -20,15 +21,31 @@ class Base(DeclarativeBase):
     pass
 
 
-class User(Base):
-    __tablename__ = "users"
-    __table_args__ = (CheckConstraint("role IN ('admin', 'demo')", name="users_role_check"),)
+class AuthSession(Base):
+    __tablename__ = "auth_sessions"
+    __table_args__ = (
+        CheckConstraint("role IN ('admin', 'demo')", name="auth_sessions_role_check"),
+        CheckConstraint(
+            "(role = 'admin' AND subject IS NOT NULL AND id_token IS NOT NULL) OR "
+            "(role = 'demo' AND subject IS NULL AND display_name IS NULL AND id_token IS NULL)",
+            name="auth_sessions_identity_check",
+        ),
+        Index("idx_auth_sessions_last_seen_at", "last_seen_at"),
+        Index("idx_auth_sessions_absolute_expires_at", "absolute_expires_at"),
+    )
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    email: Mapped[str] = mapped_column(Text, unique=True, nullable=False)
-    password_hash: Mapped[str] = mapped_column(Text, nullable=False)
+    token_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
     role: Mapped[str] = mapped_column(Text, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=func.now())
+    subject: Mapped[str | None] = mapped_column(Text)
+    display_name: Mapped[str | None] = mapped_column(Text)
+    id_token: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    last_seen_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    absolute_expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
 class Setting(Base):
@@ -105,7 +122,7 @@ class PriceCache(Base):
     __tablename__ = "price_cache"
     __table_args__ = (Index("idx_price_cache_cached_at", "cached_at"),)
 
-    account_email: Mapped[str] = mapped_column(Text, primary_key=True)
+    account_key: Mapped[str] = mapped_column(Text, primary_key=True)
     ticker: Mapped[str] = mapped_column(Text, primary_key=True)
     data: Mapped[list] = mapped_column(JSONB, nullable=False)
     cached_at: Mapped[datetime] = mapped_column(

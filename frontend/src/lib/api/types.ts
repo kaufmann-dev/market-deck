@@ -63,8 +63,8 @@ export interface MetricsResponse {
 }
 
 export interface CurrentUser {
-  email?: string;
   role: "admin" | "demo";
+  displayName?: string;
 }
 
 export interface SearchQuote {

@@ -13,7 +13,8 @@ Dashboard for displaying financial asset information — live prices, FX convers
 - [Features](#features)
 - [Deploy on Coolify](#deploy-on-coolify)
 - [Environment Variables](#environment-variables)
-- [First Login](#first-login)
+- [Authentication Setup](#authentication-setup)
+- [First Access](#first-access)
 - [Operational Notes](#operational-notes)
 - [Troubleshooting](#troubleshooting)
 - [Local Development](#local-development)
@@ -22,10 +23,10 @@ Dashboard for displaying financial asset information — live prices, FX convers
 
 ## Features
 
-- Admin account with full access to watchlists, tickers, per-list tags, settings, cache clearing, and password changes.
-- Demo account with read-only access.
+- OIDC-authenticated admin access to watchlists, tickers, per-list tags, settings, and cache clearing.
+- Anonymous demo login with read-only access and no credentials.
 - Alembic-managed PostgreSQL schema, migrated automatically on startup; seed data on first startup.
-- JWT login/session restore.
+- Opaque server-side sessions with HttpOnly cookies, a 24-hour sliding idle timeout, and a seven-day absolute lifetime.
 - Server-side authorization for all write endpoints.
 - Server-side metrics: FX conversion, lookback returns, and monthly heatmap data computed on the backend.
 - Single-stock dashboards with shareable `/stock/{symbol}` URLs, global Yahoo symbol search, native-currency charts, fundamentals, technicals, news, and analyst readouts.
@@ -81,10 +82,18 @@ Required:
 
 ```env
 DATABASE_URL=postgresql://USER:PASSWORD@HOST:5432/DATABASE
-MARKETDECK_JWT_SECRET=replace-with-a-long-random-secret
-MARKETDECK_ADMIN_EMAIL=admin@example.com
-MARKETDECK_ADMIN_PASSWORD=replace-with-a-strong-password
+MARKETDECK_PUBLIC_URL=https://market-deck.example.com
+MARKETDECK_OIDC_ISSUER_URL=https://identity.example.com/application/o/market-deck
+MARKETDECK_OIDC_CLIENT_ID=market-deck
+MARKETDECK_OIDC_CLIENT_SECRET=set-in-the-deployment-platform
+MARKETDECK_OIDC_STATE_SECRET=set-to-a-random-value-of-at-least-32-characters
 ```
+
+`MARKETDECK_PUBLIC_URL` is the externally reachable origin with no path; a trailing slash is normalized.
+`MARKETDECK_OIDC_ISSUER_URL` is the provider issuer; the app reads discovery metadata from
+`<issuer>/.well-known/openid-configuration`. Both URLs must use HTTPS outside local development;
+HTTP is accepted only for `localhost`, `127.0.0.1`, or `::1`. The client and state secrets are
+server-only values.
 
 Optional:
 
@@ -102,33 +111,64 @@ PORT=8000
 
 Recommended Coolify settings:
 
-| Setting | Value | Notes |
-| --- | --- | --- |
-| Build Variable | Yes | Coolify enables this by default. The app only needs these at runtime, so disabling buildtime is optional hardening. |
-| Runtime Variable | Yes | Required. The server reads these when the container starts. |
-| Literal | No | Use `Yes` only when the value contains `$...` text that must not be interpolated. |
-| Multiline | No | None of these values should be multiline. |
+| Setting          | Value | Notes                                                                                                               |
+| ---------------- | ----- | ------------------------------------------------------------------------------------------------------------------- |
+| Build Variable   | Yes   | Coolify enables this by default. The app only needs these at runtime, so disabling buildtime is optional hardening. |
+| Runtime Variable | Yes   | Required. The server reads these when the container starts.                                                         |
+| Literal          | No    | Use `Yes` only when the value contains `$...` text that must not be interpolated.                                   |
+| Multiline        | No    | None of these values should be multiline.                                                                           |
 
-Generate a JWT secret locally:
+Generate the OIDC state-cookie signing secret locally:
 
 ```bash
 openssl rand -hex 32
 ```
 
-## First Login
+## Authentication Setup
 
-On first successful startup, the app applies migrations to create the schema, seeds default dashboard data, and inserts the demo and admin users.
+Admin sign-in uses the provider's Authorization Code flow with PKCE S256, then creates an opaque
+database-backed Market Deck session; the provider access policy is the sole admin admission control.
+The **Login as Demo** action remains anonymous and creates a separate read-only session without OIDC.
+Both local session types have a 24-hour sliding idle timeout and a seven-day absolute lifetime. Only
+throttled signals from trusted pointer, keyboard, or click activity extend the idle timeout; startup
+data loads, session probes, and other background requests do not.
+
+- **Public Client: Off** — the FastAPI server securely stores a client secret.
+- **Callback path:** `/api/auth/callback`
+- **Application logout path:** `/api/auth/logout`
+- **Post-logout callback path:** `/api/auth/logged-out` (then returns to `/`)
+- **Authentication environment variables:** all five authentication variables
+  (`MARKETDECK_PUBLIC_URL` and the four `MARKETDECK_OIDC_*` variables) documented under
+  [Environment Variables](#environment-variables) are required; there are no optional
+  authentication variables.
+
+Create a confidential OIDC web client at the provider, enable Authorization Code and PKCE S256, and
+allow the `openid email profile` scopes. Register these exact URLs, replacing the example origin with
+`MARKETDECK_PUBLIC_URL`:
+
+```text
+Redirect URI: https://market-deck.example.com/api/auth/callback
+Post-logout redirect URI: https://market-deck.example.com/api/auth/logged-out
+```
+
+The discovery document must advertise an `end_session_endpoint`. Restrict the provider application
+access policy to the intended administrator(s); Market Deck deliberately has no identity or claim
+allowlist of its own, so every identity admitted by that provider policy receives admin access.
+After setting the new variables, remove the obsolete `MARKETDECK_JWT_SECRET`,
+`MARKETDECK_ADMIN_EMAIL`, and `MARKETDECK_ADMIN_PASSWORD` deployment variables; the app no longer
+reads them.
+
+## First Access
+
+On first successful startup, the app applies migrations and seeds the default dashboard data.
 
 Checklist:
 
 1. Open the public app URL.
 2. Click **Login as Demo** and confirm the dashboard loads.
 3. Log out.
-4. Log in with `MARKETDECK_ADMIN_EMAIL` and `MARKETDECK_ADMIN_PASSWORD`.
+4. Click **Sign in as Admin** and authenticate through the OIDC provider.
 5. Confirm admin controls are visible.
-6. Change the admin password in the app if desired.
-
-Changing `MARKETDECK_ADMIN_PASSWORD` later does not overwrite an existing database user. Use the in-app password change flow after the first seed.
 
 ## Operational Notes
 
@@ -137,7 +177,7 @@ Changing `MARKETDECK_ADMIN_PASSWORD` later does not overwrite an existing databa
 The schema is managed by Alembic. On startup, `app.migrate` runs before the server binds:
 
 - An Alembic-managed database is upgraded to the latest revision.
-- A **legacy database from before this refactor** (a `watchlists` table but no `alembic_version`) is stamped at the baseline revision `0001` — which matches that schema exactly — and then upgraded. Existing users, watchlists, and tickers are preserved.
+- A **legacy database from before this refactor** (a `watchlists` table but no `alembic_version`) is stamped at the baseline revision `0001` — which matches that schema exactly — and then upgraded. Watchlists, tickers, tags, settings, and caches are preserved; obsolete local password-user rows are removed by the OIDC migration.
 - A fresh database has all migrations applied.
 
 The `nixpacks.toml` start command also runs migrations, so they are applied automatically on every deploy.
@@ -146,7 +186,8 @@ The `nixpacks.toml` start command also runs migrations, so they are applied auto
 
 Dashboard seed data is first-deploy only. If the `watchlists` table already has rows, the app skips watchlist/ticker/tag/settings seeding.
 
-Admin and demo users are inserted with `ON CONFLICT DO NOTHING`, so redeploys do not reset the admin password.
+Authentication records are not seeded. OIDC identities remain provider-owned, while anonymous demo
+sessions are created only when someone selects **Login as Demo**.
 
 ### Startup Retries
 
@@ -154,7 +195,8 @@ The server retries the PostgreSQL connection during startup. This helps when Coo
 
 ### Demo Account
 
-The demo account is a real database user with role `demo`, but it does not use public credentials. The **Login as Demo** button calls `POST /api/auth/demo-login` and receives a read-only demo session.
+The demo path requires no identity or credentials. The **Login as Demo** button calls
+`POST /api/auth/demo-login` and receives an opaque, read-only, server-side session cookie.
 
 Demo users can browse data and fetch prices, but write endpoints return `403`.
 
@@ -173,7 +215,7 @@ The in-process rate limit and the price-fetch unresolved-symbol cooldown are per
 
 ### Price Cache
 
-Yahoo Finance chart responses are fetched in parallel and cached in PostgreSQL per account and ticker. This means the demo account shares cached prices across devices, while admin and demo sessions do not share price-cache entries with each other.
+Yahoo Finance chart responses are fetched in parallel and cached in PostgreSQL per access mode and ticker. All admin sessions share one cache, all demo sessions share another, and admin and demo sessions do not share price-cache entries with each other.
 
 The default cache TTL is 1 hour. Override it with:
 
@@ -205,9 +247,11 @@ Required env vars:
 
 ```text
 DATABASE_URL
-MARKETDECK_JWT_SECRET
-MARKETDECK_ADMIN_EMAIL
-MARKETDECK_ADMIN_PASSWORD
+MARKETDECK_PUBLIC_URL
+MARKETDECK_OIDC_ISSUER_URL
+MARKETDECK_OIDC_CLIENT_ID
+MARKETDECK_OIDC_CLIENT_SECRET
+MARKETDECK_OIDC_STATE_SECRET
 ```
 
 ### Cannot Connect to PostgreSQL
@@ -231,7 +275,10 @@ This endpoint also checks database connectivity. If it fails, inspect app logs f
 
 ### Login Fails
 
-Check that the credentials match the database user. If the admin user already existed, changing `MARKETDECK_ADMIN_PASSWORD` in Coolify will not reset it.
+Check the provider application access policy, discovery URL, registered redirect URI, client ID, and
+client secret. A callback error usually means the provider registration does not exactly match
+`MARKETDECK_PUBLIC_URL`; a logout error can also mean discovery metadata lacks an
+`end_session_endpoint` or the post-logout redirect URI was not registered.
 
 ## Local Development
 
@@ -245,9 +292,11 @@ python3 -m venv .venv
 pip install -r requirements-dev.txt   # runtime deps + pytest, ruff, respx, testcontainers
 
 export DATABASE_URL="postgresql://user:password@localhost:5432/marketdeck"
-export MARKETDECK_JWT_SECRET="$(openssl rand -hex 32)"
-export MARKETDECK_ADMIN_EMAIL="admin@example.com"
-export MARKETDECK_ADMIN_PASSWORD="change-me"
+export MARKETDECK_PUBLIC_URL="http://localhost:5173"
+export MARKETDECK_OIDC_ISSUER_URL="https://identity.example.com/application/o/market-deck"
+export MARKETDECK_OIDC_CLIENT_ID="market-deck-local"
+export MARKETDECK_OIDC_CLIENT_SECRET="set-locally"
+export MARKETDECK_OIDC_STATE_SECRET="$(openssl rand -hex 32)"
 
 cd backend
 python -m app.migrate                 # optional; the server also migrates on startup
@@ -262,7 +311,11 @@ npm install
 npm run dev
 ```
 
+Register `http://localhost:5173/api/auth/callback` and
+`http://localhost:5173/api/auth/logged-out` on the provider for this development client.
 During development, browse the Vite dev server for hot-reload. For a production-like run, `npm run build` and open the backend directly at `http://localhost:8000`.
+When using the production-like backend URL, change `MARKETDECK_PUBLIC_URL` and the provider's local
+redirect registrations to `http://localhost:8000` before starting the backend.
 
 ### Checks
 
@@ -276,12 +329,15 @@ cd frontend && npm run check && npm run build   # svelte-check + production buil
 Public:
 
 - `GET /api/auth/demo-info`
-- `POST /api/auth/login`
+- `GET /api/auth/login` — starts the OIDC Authorization Code + PKCE flow
+- `GET /api/auth/callback` — registered provider callback
 - `POST /api/auth/demo-login`
+- `GET /api/auth/logged-out` — registered provider post-logout callback
 
 Authenticated admin or demo:
 
 - `GET /api/auth/me`
+- `POST /api/auth/logout`
 - `GET /api/init`
 - `GET /api/settings`
 - `GET /api/lists/{slug}/metrics` — server-computed returns/heatmap; optional `?base=CUR` override
@@ -293,7 +349,6 @@ Authenticated admin or demo:
 
 Admin only:
 
-- `PUT /api/auth/password`
 - `PUT /api/settings/{key}`
 - `POST /api/lists`
 - `PUT /api/lists/{slug}`
@@ -306,11 +361,8 @@ Admin only:
 - `DELETE /api/tickers/{id}`
 - `DELETE /api/prices/cache`
 
-Protected endpoints require:
-
-```text
-Authorization: Bearer <token>
-```
+Protected endpoints use the HttpOnly `marketdeck_session` cookie automatically. State-changing
+requests additionally require the browser's exact `Origin` to match `MARKETDECK_PUBLIC_URL`.
 
 ## References
 

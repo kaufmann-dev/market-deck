@@ -1,14 +1,11 @@
-"""Initial data seeding. Users are seeded idempotently on every start;
-watchlist data is seeded only when the watchlists table is empty."""
+"""Initial dashboard data seeding for an empty watchlist database."""
 import logging
 
 from sqlalchemy import func, select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
-from .config import DEMO_AUTH_DISABLED, DEMO_USER_ID, get_settings
-from .models import Setting, Ticker, User, Watchlist, WatchlistTag
-from .security import hash_password
+from .models import Setting, Ticker, Watchlist, WatchlistTag
 from .seed_data import SEED_SETTINGS, SEED_TAG_COLORS, SEED_TICKERS, SEED_WATCHLISTS
 
 logger = logging.getLogger(__name__)
@@ -34,25 +31,6 @@ def tag_color_defaults(tag: str) -> dict:
             "border": "rgba(99, 102, 241, .3)",
         }
     return seeded.get(normalized_tag, seeded["OTHER"])
-
-
-def seed_users(session: Session) -> None:
-    settings = get_settings()
-    session.execute(
-        pg_insert(User)
-        .values(email=DEMO_USER_ID, password_hash=DEMO_AUTH_DISABLED, role="demo")
-        .on_conflict_do_nothing(index_elements=["email"])
-    )
-    session.execute(
-        pg_insert(User)
-        .values(
-            email=settings.admin_email,
-            password_hash=hash_password(settings.admin_password),
-            role="admin",
-        )
-        .on_conflict_do_nothing(index_elements=["email"])
-    )
-    session.commit()
 
 
 def seed_initial_data(session: Session) -> None:
@@ -135,6 +113,5 @@ def sync_watchlist_tags(session: Session) -> None:
 
 
 def run_seed(session: Session) -> None:
-    seed_users(session)
     seed_initial_data(session)
     sync_watchlist_tags(session)
