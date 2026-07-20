@@ -7,9 +7,10 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
+from starlette.middleware.sessions import SessionMiddleware
 
 from .api import api_router
-from .config import get_settings
+from .config import OIDC_FLOW_COOKIE, get_settings
 from .db import dispose_engine, session_factory
 from .log import setup_logging
 from .migrate import run_migrations
@@ -30,7 +31,16 @@ async def lifespan(app: FastAPI):
 
 def create_app() -> FastAPI:
     setup_logging()
+    settings = get_settings()
     app = FastAPI(lifespan=lifespan)
+    app.add_middleware(
+        SessionMiddleware,
+        secret_key=settings.oidc_state_secret.get_secret_value(),
+        session_cookie=OIDC_FLOW_COOKIE,
+        max_age=600,
+        same_site="lax",
+        https_only=settings.secure_cookies,
+    )
     app.state.limiter = limiter
 
     @app.exception_handler(RateLimitExceeded)
@@ -46,7 +56,7 @@ def create_app() -> FastAPI:
 
     app.include_router(api_router)
 
-    static_dir: Path = get_settings().static_dir.resolve()
+    static_dir: Path = settings.static_dir.resolve()
 
     @app.get("/{path:path}")
     def serve_static(path: str):

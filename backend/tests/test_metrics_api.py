@@ -125,7 +125,9 @@ def test_metrics_yahoo_chart_uses_relative_range(client, admin_headers, yahoo_mo
         assert "period2" not in params
 
 
-def test_cache_is_per_account(client, admin_headers, demo_headers, yahoo_mock, metrics_list):
+def test_cache_is_separate_for_admin_and_demo(
+    client, admin_headers, demo_headers, yahoo_mock, metrics_list
+):
     client.get(f"/api/lists/{metrics_list}/metrics", headers=admin_headers)
     admin_calls = yahoo_mock.call_count
 

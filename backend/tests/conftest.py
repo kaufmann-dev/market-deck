@@ -1,5 +1,5 @@
 """Shared fixtures: a real PostgreSQL (testcontainers, or TEST_DATABASE_URL),
-the app under TestClient with lifespan (migrations + seed), and auth tokens.
+the app under TestClient with lifespan (migrations + seed), and local sessions.
 
 Environment must be configured before any `app.*` import, because Settings
 is cached at first use.
@@ -7,9 +7,14 @@ is cached at first use.
 import os
 from pathlib import Path
 
-os.environ.setdefault("MARKETDECK_JWT_SECRET", "test-secret-0123456789abcdef0123456789abcdef")
-os.environ.setdefault("MARKETDECK_ADMIN_EMAIL", "admin@test.local")
-os.environ.setdefault("MARKETDECK_ADMIN_PASSWORD", "admin-password")
+os.environ.setdefault("MARKETDECK_PUBLIC_URL", "https://testserver")
+os.environ.setdefault("MARKETDECK_OIDC_ISSUER_URL", "https://idp.test/application/o/marketdeck")
+os.environ.setdefault("MARKETDECK_OIDC_CLIENT_ID", "marketdeck-test")
+os.environ.setdefault("MARKETDECK_OIDC_CLIENT_SECRET", "test-client-secret")
+os.environ.setdefault(
+    "MARKETDECK_OIDC_STATE_SECRET",
+    "test-state-secret-0123456789abcdef0123456789abcdef",
+)
 os.environ.setdefault("MARKETDECK_DB_CONNECT_RETRIES", "3")
 os.environ.setdefault("MARKETDECK_DB_CONNECT_RETRY_DELAY", "0.2")
 
@@ -24,11 +29,10 @@ if (
     os.environ.setdefault("TESTCONTAINERS_RYUK_DISABLED", "true")
 
 import pytest
-from fastapi.testclient import TestClient
 from sqlalchemy import text
+from starlette.testclient import TestClient
 
-ADMIN_EMAIL = os.environ["MARKETDECK_ADMIN_EMAIL"]
-ADMIN_PASSWORD = os.environ["MARKETDECK_ADMIN_PASSWORD"]
+PUBLIC_URL = os.environ["MARKETDECK_PUBLIC_URL"]
 
 
 @pytest.fixture(scope="session")
@@ -56,7 +60,7 @@ def client(database_url):
     from app.main import app
 
     dispose_engine()
-    with TestClient(app) as test_client:
+    with TestClient(app, base_url=PUBLIC_URL) as test_client:
         yield test_client
     dispose_engine()
 
@@ -65,13 +69,15 @@ def client(database_url):
 def clean_db(client):
     """Reset all tables to the freshly-seeded state before each test."""
     from app.db import session_factory
+    from app.oidc import get_oidc_client
     from app.seed import run_seed
     from app.services import price_cache, yahoo_auth
 
     with session_factory()() as session:
         session.execute(
             text(
-                "TRUNCATE users, settings, watchlists, tickers, watchlist_tags, price_cache, yahoo_cache "
+                "TRUNCATE auth_sessions, settings, watchlists, tickers, watchlist_tags, "
+                "price_cache, yahoo_cache "
                 "RESTART IDENTITY CASCADE"
             )
         )
@@ -80,30 +86,40 @@ def clean_db(client):
     with price_cache._failure_cache_lock:
         price_cache._failure_cache.clear()
     yahoo_auth.invalidate()
+    get_oidc_client.cache_clear()
+    client.cookies.clear()
     yield
 
 
 @pytest.fixture
-def admin_token(client) -> str:
-    response = client.post(
-        "/api/auth/login", json={"email": ADMIN_EMAIL, "password": ADMIN_PASSWORD}
-    )
-    assert response.status_code == 200, response.text
-    return response.json()["token"]
+def admin_headers(client) -> dict:
+    from app.config import APP_SESSION_COOKIE
+    from app.db import session_factory
+    from app.security import create_auth_session
+
+    with session_factory()() as session:
+        raw_token = create_auth_session(
+            session,
+            role="admin",
+            subject="oidc-admin-subject",
+            display_name="admin@test.local",
+            id_token="test-id-token",
+        )
+    return {
+        "Cookie": f"{APP_SESSION_COOKIE}={raw_token}",
+        "Origin": PUBLIC_URL,
+    }
 
 
 @pytest.fixture
-def demo_token(client) -> str:
-    response = client.post("/api/auth/demo-login")
-    assert response.status_code == 200, response.text
-    return response.json()["token"]
+def demo_headers(client) -> dict:
+    from app.config import APP_SESSION_COOKIE
+    from app.db import session_factory
+    from app.security import create_auth_session
 
-
-@pytest.fixture
-def admin_headers(admin_token) -> dict:
-    return {"Authorization": f"Bearer {admin_token}"}
-
-
-@pytest.fixture
-def demo_headers(demo_token) -> dict:
-    return {"Authorization": f"Bearer {demo_token}"}
+    with session_factory()() as session:
+        raw_token = create_auth_session(session, role="demo")
+    return {
+        "Cookie": f"{APP_SESSION_COOKIE}={raw_token}",
+        "Origin": PUBLIC_URL,
+    }

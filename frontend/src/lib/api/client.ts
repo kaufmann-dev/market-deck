@@ -1,18 +1,4 @@
-const AUTH_TOKEN_KEY = "marketdeck_token";
-
-export function getToken(): string | null {
-  return localStorage.getItem(AUTH_TOKEN_KEY);
-}
-
-export function setToken(token: string): void {
-  localStorage.setItem(AUTH_TOKEN_KEY, token);
-}
-
-export function removeToken(): void {
-  localStorage.removeItem(AUTH_TOKEN_KEY);
-}
-
-/** Registered by the auth store; called when any authenticated request gets a 401. */
+/** Registered by the auth store; called when an API request gets a 401. */
 let onUnauthorized: (() => void) | null = null;
 
 export function setUnauthorizedHandler(handler: () => void): void {
@@ -39,21 +25,12 @@ async function errorMessage(response: Response): Promise<string> {
   return text || `Request failed (${response.status})`;
 }
 
-interface ApiOptions extends RequestInit {
-  auth?: boolean;
-}
-
-export async function apiFetch(url: string, options: ApiOptions = {}): Promise<Response> {
-  const { auth = true, ...fetchOptions } = options;
-  const headers = new Headers(fetchOptions.headers ?? {});
-  const token = getToken();
-  if (auth && token) {
-    headers.set("Authorization", `Bearer ${token}`);
-  }
-  const response = await fetch(url, { ...fetchOptions, headers });
+export async function apiFetch(url: string, options: RequestInit = {}): Promise<Response> {
+  const headers = new Headers(options.headers ?? {});
+  const response = await fetch(url, { ...options, headers, credentials: "same-origin" });
   if (!response.ok) {
     const message = await errorMessage(response);
-    if (auth && response.status === 401) {
+    if (response.status === 401) {
       onUnauthorized?.();
     }
     throw new ApiError(message, response.status);
@@ -61,12 +38,12 @@ export async function apiFetch(url: string, options: ApiOptions = {}): Promise<R
   return response;
 }
 
-export async function apiJson<T>(url: string, options: ApiOptions = {}): Promise<T> {
+export async function apiJson<T>(url: string, options: RequestInit = {}): Promise<T> {
   const response = await apiFetch(url, options);
   return response.json() as Promise<T>;
 }
 
-export function postJson<T>(url: string, body: unknown, options: ApiOptions = {}): Promise<T> {
+export function postJson<T>(url: string, body: unknown, options: RequestInit = {}): Promise<T> {
   return apiJson<T>(url, {
     ...options,
     method: "POST",

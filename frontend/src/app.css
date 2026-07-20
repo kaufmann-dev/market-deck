@@ -129,33 +129,6 @@ body {
   margin: 8px 0 28px;
 }
 
-.login-form {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.login-form label {
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  color: var(--text-tertiary);
-}
-
-.login-form input {
-  padding: 12px;
-  background: transparent;
-  border: 1px solid var(--border-subtle);
-  color: var(--text-primary);
-  border-radius: 0;
-  font-size: 13px;
-}
-
-.login-form input:focus {
-  outline: none;
-  border-color: var(--text-primary);
-}
-
 .login-submit,
 .demo-login button,
 .session-bar button {
@@ -176,10 +149,11 @@ body {
 }
 
 .login-submit {
-  margin-top: 8px;
+  width: 100%;
   background: var(--text-primary);
   color: var(--bg-base);
   border-color: var(--text-primary);
+  text-decoration: none;
 }
 
 .login-submit:hover,
@@ -190,6 +164,7 @@ body {
 }
 
 .login-error {
+  margin-top: 10px;
   min-height: 18px;
   color: #ff6b6b;
   font-size: 12px;
@@ -261,10 +236,6 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.label-short {
-  display: none;
 }
 
 button,
@@ -1973,7 +1944,7 @@ body:has(.editor-overlay-root) .mobile-nav-toggle {
 
   .session-bar {
     display: grid !important;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr;
     gap: 10px;
     align-items: stretch;
     justify-content: stretch;
@@ -1991,14 +1962,6 @@ body:has(.editor-overlay-root) .mobile-nav-toggle {
     width: 100%;
     min-height: 44px;
     padding: 10px 12px;
-  }
-
-  .session-bar .label-full {
-    display: none;
-  }
-
-  .session-bar .label-short {
-    display: inline;
   }
 
   .home-grid {

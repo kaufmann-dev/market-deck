@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount } from "svelte";
   import LegalLinks from "./lib/components/LegalLinks.svelte";
   import LoginView from "./lib/components/LoginView.svelte";
   import MobileNav from "./lib/components/MobileNav.svelte";
@@ -10,29 +11,39 @@
   import { app } from "./lib/stores/app.svelte";
   import { auth } from "./lib/stores/auth.svelte";
   import { router } from "./lib/stores/router.svelte";
+  import { apiFetch } from "./lib/api/client";
 
   let mobileNavOpen = $state(false);
+  let lastActivitySignalAt = -Infinity;
+
+  const activitySignalInterval = 5 * 60 * 1000;
 
   const loggedIn = $derived(auth.currentUser !== null);
 
-  $effect(() => {
+  function syncBodyAuthClass() {
     document.body.classList.toggle("auth-ready", loggedIn);
     document.body.classList.toggle("auth-pending", !loggedIn);
-  });
+  }
 
-  // Session bootstrap: validate a stored token, then load app data.
-  $effect(() => {
-    void (async () => {
-      if (await auth.restore()) {
-        await app.loadInit();
-        app.syncRoute(router.route);
-      }
-    })();
-  });
+  $effect(syncBodyAuthClass);
 
-  $effect(() => {
+  function syncActiveRoute() {
     if (!loggedIn) return;
     app.syncRoute(router.route);
+  }
+
+  $effect(syncActiveRoute);
+
+  async function restoreSession() {
+    if (await auth.restore()) {
+      await app.loadInit();
+      app.syncRoute(router.route);
+    }
+  }
+
+  // Restore the cookie-backed session exactly once when the SPA mounts.
+  onMount(() => {
+    void restoreSession();
   });
 
   async function handleLoggedIn() {
@@ -44,10 +55,30 @@
     auth.logout();
     app.reset();
   }
+
+  function signalUserActivity(event: Event) {
+    if (!loggedIn || !event.isTrusted) return;
+
+    const now = Date.now();
+    if (now - lastActivitySignalAt < activitySignalInterval) return;
+    lastActivitySignalAt = now;
+
+    void apiFetch("/api/auth/activity", {
+      method: "POST",
+      headers: { "x-marketdeck-user-activity": "1" },
+      keepalive: true,
+    }).catch(() => {});
+  }
 </script>
 
+<svelte:window
+  onpointerdown={signalUserActivity}
+  onkeydown={signalUserActivity}
+  onclick={signalUserActivity}
+/>
+
 {#if auth.restoring}
-  <!-- brief blank shell while the stored token is validated -->
+  <!-- brief blank shell while the session is restored -->
 {:else if !loggedIn}
   <LoginView onLoggedIn={handleLoggedIn} />
 {:else}

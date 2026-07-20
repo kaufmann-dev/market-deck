@@ -1,22 +1,13 @@
-import {
-  apiJson,
-  getToken,
-  postJson,
-  removeToken,
-  setToken,
-  setUnauthorizedHandler,
-} from "../api/client";
+import { apiJson, setUnauthorizedHandler } from "../api/client";
 import type { CurrentUser } from "../api/types";
 
-interface LoginResponse {
-  token: string;
-  email?: string;
-  role: "admin" | "demo";
+interface DemoLoginResponse {
+  role: "demo";
 }
 
 class AuthStore {
   currentUser = $state<CurrentUser | null>(null);
-  /** true while the stored token is being validated on startup */
+  /** true while the cookie-backed session is being restored on startup */
   restoring = $state(true);
 
   get isAdmin(): boolean {
@@ -29,15 +20,11 @@ class AuthStore {
 
   get sessionLabel(): string {
     if (this.isDemo) return "Demo";
-    return this.currentUser?.email || "Admin";
+    return this.currentUser?.displayName || "Admin";
   }
 
-  /** Validate a persisted token on app start. */
+  /** Restore the cookie-backed session on app start. */
   async restore(): Promise<boolean> {
-    if (!getToken()) {
-      this.restoring = false;
-      return false;
-    }
     try {
       this.currentUser = await apiJson<CurrentUser>("/api/auth/me");
       return true;
@@ -49,27 +36,14 @@ class AuthStore {
     }
   }
 
-  async login(email: string, password: string): Promise<void> {
-    const data = await postJson<LoginResponse>(
-      "/api/auth/login",
-      { email, password },
-      { auth: false },
-    );
-    setToken(data.token);
-    this.currentUser = { email: data.email ?? "", role: data.role };
-  }
-
   async loginAsDemo(): Promise<void> {
-    const data = await apiJson<LoginResponse>("/api/auth/demo-login", {
+    const data = await apiJson<DemoLoginResponse>("/api/auth/demo-login", {
       method: "POST",
-      auth: false,
     });
-    setToken(data.token);
-    this.currentUser = { email: "", role: data.role };
+    this.currentUser = data;
   }
 
   logout(): void {
-    removeToken();
     this.currentUser = null;
   }
 }
