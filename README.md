@@ -128,8 +128,8 @@ openssl rand -hex 32
 
 Admin authentication uses OIDC Authorization Code + PKCE S256 through the configured provider, then creates a server-side admin session; demo users can still use separate anonymous read-only sessions.
 - **Public Client:** Off — the app stores `MARKETDECK_OIDC_CLIENT_SECRET` server-side.
-- **Callback URL:** `${MARKETDECK_PUBLIC_URL}/api/auth/callback`
-- **Logout Callback URL:** `${MARKETDECK_PUBLIC_URL}/api/auth/logged-out`
+- **Callback URL:** `/api/auth/callback`
+- **Logout Callback URL:** `/api/auth/logged-out`
 - **Authentication env vars:** required: `MARKETDECK_PUBLIC_URL`, `MARKETDECK_OIDC_ISSUER_URL`, `MARKETDECK_OIDC_CLIENT_ID`, `MARKETDECK_OIDC_CLIENT_SECRET`, `MARKETDECK_OIDC_STATE_SECRET`; all listed in [Environment Variables](#environment-variables) with their required/optional status.
 
 ## First Access
