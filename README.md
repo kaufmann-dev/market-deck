@@ -126,37 +126,11 @@ openssl rand -hex 32
 
 ## Authentication Setup
 
-Admin sign-in uses the provider's Authorization Code flow with PKCE S256, then creates an opaque
-database-backed Market Deck session; the provider access policy is the sole admin admission control.
-The **Login as Demo** action remains anonymous and creates a separate read-only session without OIDC.
-Both local session types have a 24-hour sliding idle timeout and a seven-day absolute lifetime. Only
-throttled signals from trusted pointer, keyboard, or click activity extend the idle timeout; startup
-data loads, session probes, and other background requests do not.
-
-- **Public Client: Off** — the FastAPI server securely stores a client secret.
-- **Callback path:** `/api/auth/callback`
-- **Application logout path:** `/api/auth/logout`
-- **Post-logout callback path:** `/api/auth/logged-out` (then returns to `/`)
-- **Authentication environment variables:** all five authentication variables
-  (`MARKETDECK_PUBLIC_URL` and the four `MARKETDECK_OIDC_*` variables) documented under
-  [Environment Variables](#environment-variables) are required; there are no optional
-  authentication variables.
-
-Create a confidential OIDC web client at the provider, enable Authorization Code and PKCE S256, and
-allow the `openid email profile` scopes. Register these exact URLs, replacing the example origin with
-`MARKETDECK_PUBLIC_URL`:
-
-```text
-Redirect URI: https://market-deck.example.com/api/auth/callback
-Post-logout redirect URI: https://market-deck.example.com/api/auth/logged-out
-```
-
-The discovery document must advertise an `end_session_endpoint`. Restrict the provider application
-access policy to the intended administrator(s); Market Deck deliberately has no identity or claim
-allowlist of its own, so every identity admitted by that provider policy receives admin access.
-After setting the new variables, remove the obsolete `MARKETDECK_JWT_SECRET`,
-`MARKETDECK_ADMIN_EMAIL`, and `MARKETDECK_ADMIN_PASSWORD` deployment variables; the app no longer
-reads them.
+Admin authentication uses OIDC Authorization Code + PKCE S256 through the configured provider, then creates a server-side admin session; demo users can still use separate anonymous read-only sessions.
+- **Public Client:** Off — the app stores `MARKETDECK_OIDC_CLIENT_SECRET` server-side.
+- **Callback URL:** `${MARKETDECK_PUBLIC_URL}/api/auth/callback`
+- **Logout Callback URL:** `${MARKETDECK_PUBLIC_URL}/api/auth/logged-out`
+- **Authentication env vars:** required: `MARKETDECK_PUBLIC_URL`, `MARKETDECK_OIDC_ISSUER_URL`, `MARKETDECK_OIDC_CLIENT_ID`, `MARKETDECK_OIDC_CLIENT_SECRET`, `MARKETDECK_OIDC_STATE_SECRET`; all listed in [Environment Variables](#environment-variables) with their required/optional status.
 
 ## First Access
 
