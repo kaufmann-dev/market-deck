@@ -1,9 +1,26 @@
-<svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Market Deck modular market grid logo">
   <style>
-    #icon-path { fill: #000000 }
+    svg {
+      fill: url(#market-gradient);
+    }
+    .pink { stop-color: #c43c6d; }
+    .green { stop-color: #237a57; }
     @media (prefers-color-scheme: dark) {
-      #icon-path { fill: #ffffff }
+      .pink { stop-color: #fc8181; }
+      .green { stop-color: #68d391; }
     }
   </style>
-  <path id="icon-path" d="M320-414v-306h120v306l-60-56-60 56Zm200 60v-526h120v406L520-354ZM120-216v-344h120v224L120-216Zm0 98 258-258 142 122 224-224h-64v-80h200v200h-80v-64L524-146 382-268 232-118H120Z"/>
+  <defs>
+    <linearGradient id="market-gradient" x1="48" y1="48" x2="464" y2="464" gradientUnits="userSpaceOnUse">
+      <stop class="pink"/>
+      <stop class="green" offset="1"/>
+    </linearGradient>
+  </defs>
+  <g>
+    <!-- Four card-columns make a dense market grid; their top edge is a
+         recognisable price path even at favicon scale. -->
+    <path d="M48 296h88v168H48zM160 216h88v248h-88zM272 264h88v200h-88zM384 96h80v368h-80z"/>
+    <!-- Small cap blocks echo a terminal cursor / OHLC tick. -->
+    <path d="M48 248h88v24H48zM160 168h88v24h-88zM272 216h88v24h-88zM384 48h80v24h-80z"/>
+  </g>
 </svg>
