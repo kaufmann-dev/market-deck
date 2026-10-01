@@ -56,7 +56,7 @@ Health Check Path: /api/auth/demo-info
 
 `nixpacks.toml` defines the whole build and start:
 
-- **Build**: installs `requirements.txt` (Python) and runs `cd frontend && npm ci && npm run build` (Node, pinned to 20 via `.nvmrc`).
+- **Build**: installs `requirements.txt` (Python) and runs `cd frontend && npm ci && npm run build` (Node, pinned to 24 via `.nvmrc`).
 - **Start**: `cd backend && python -m app.migrate && uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}` — runs pending Alembic migrations, then serves the API and the built `frontend/dist/`.
 
 Leave the Coolify Start Command blank so it uses `nixpacks.toml`. Coolify normally provides `PORT` from `Port Exposes`; the server falls back to `8000` if `PORT` is absent.
@@ -256,7 +256,7 @@ client secret. A callback error usually means the provider registration does not
 
 ## Local Development
 
-Local development requires PostgreSQL and Node.js 20+.
+Local development requires PostgreSQL and Node.js 24 (Vite 8 needs at least 20.19 or 22.12).
 
 **Backend** (serves the API, and `frontend/dist/` once built):
 
