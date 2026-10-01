@@ -3,6 +3,12 @@
 # provider (pinned by .nvmrc) provides node/npm for the frontend build below.
 providers = ["python", "node"]
 
+# Use the same nixpkgs archive as the Node provider's Node 24. The Python provider's
+# older default archive puts its libstdc++ on the library path, which Node 24 cannot
+# load (CXXABI_1.3.15 not found).
+[phases.setup]
+nixpkgsArchive = "23f9169c4ccce521379e602cc82ed873a1f1b52b"
+
 [phases.build]
 cmds = ["cd frontend && npm ci && npm run build"]
 
