@@ -1,4 +1,4 @@
-import { apiJson, del, putJson } from "../api/client";
+import { ApiError, apiJson, del, putJson } from "../api/client";
 import type {
   ChartResponse,
   FinancialsResponse,
@@ -31,10 +31,13 @@ export function sortedTags(list: ListInfo | null | undefined): TagInfo[] {
 interface LoadState {
   status: "loading" | "ok" | "error";
   message?: string;
+  notFound?: boolean;
 }
 
 class AppStore {
   lists = $state<Record<string, ListInfo>>({});
+  /** True once /api/init has loaded the lists, so unknown list slugs can be told apart. */
+  initialized = $state(false);
   settings = $state<Record<string, string>>({});
   /** Demo sessions change the base currency locally only. */
   demoBaseCurrency = $state<string | null>(null);
@@ -134,6 +137,7 @@ class AppStore {
     }
     this.lists = data.lists;
     this.settings = data.settings;
+    this.initialized = true;
   }
 
   activateHome(): void {
@@ -157,7 +161,7 @@ class AppStore {
   }
 
   syncRoute(route: Route): void {
-    if (route.name === "list") {
+    if (route.name === "list" && this.lists[route.params.slug]) {
       this.activateList(route.params.slug);
       void this.loadMetrics(route.params.slug);
       return;
@@ -214,7 +218,11 @@ class AppStore {
         if (error instanceof DOMException && error.name === "AbortError") return;
         this.stockLoadState = {
           ...this.stockLoadState,
-          [key]: { status: "error", message: error instanceof Error ? error.message : String(error) },
+          [key]: {
+            status: "error",
+            message: error instanceof Error ? error.message : String(error),
+            notFound: error instanceof ApiError && error.status === 404,
+          },
         };
       } finally {
         this.#stockPending.delete(key);
@@ -459,6 +467,7 @@ class AppStore {
 
   reset(): void {
     this.lists = {};
+    this.initialized = false;
     this.settings = {};
     this.demoBaseCurrency = null;
     this.currentView = "home";

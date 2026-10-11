@@ -7,6 +7,7 @@
   import Sidebar from "./lib/components/Sidebar.svelte";
   import HomeView from "./lib/components/HomeView.svelte";
   import ListView from "./lib/components/ListView.svelte";
+  import NotFoundView from "./lib/components/NotFoundView.svelte";
   import StockView from "./lib/components/StockView.svelte";
   import { app } from "./lib/stores/app.svelte";
   import { auth } from "./lib/stores/auth.svelte";
@@ -89,9 +90,21 @@
     {#if router.route.name === "home"}
       <HomeView />
     {:else if router.route.name === "list"}
-      <ListView />
-    {:else}
+      {#if app.lists[router.route.params.slug] || !app.initialized}
+        <ListView />
+      {:else}
+        <NotFoundView
+          title="List not found"
+          message="There is no watchlist at this address. It may have been renamed or deleted."
+        />
+      {/if}
+    {:else if router.route.name === "stock"}
       <StockView symbol={router.route.params.symbol} />
+    {:else}
+      <NotFoundView
+        title="Page not found"
+        message="This page doesn't exist. It may have been moved, or the address has a typo."
+      />
     {/if}
     <LegalLinks class="app-legal-links" />
   </div>

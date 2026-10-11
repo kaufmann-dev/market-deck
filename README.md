@@ -5,7 +5,7 @@ Dashboard for displaying financial asset information — live prices, FX convers
 ## Architecture
 
 - **Backend** (`backend/`): packaged FastAPI app on SQLAlchemy 2 with Alembic migrations. Layered into API routers, services, and ORM models. Computes all FX conversion and return metrics server-side.
-- **Frontend** (`frontend/`): Svelte 5 + Vite + TypeScript single-page app, built to `frontend/dist/` and served by the backend (with SPA fallback for client routes and HTML 404/403/500 pages elsewhere).
+- **Frontend** (`frontend/`): Svelte 5 + Vite + TypeScript single-page app, built to `frontend/dist/` and served by the backend (with SPA fallback).
 - **Deployment**: a single container built by Nixpacks (Python + Node), fronted by Coolify, backed by a separate Coolify PostgreSQL resource.
 
 ## Navigation

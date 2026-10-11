@@ -97,6 +97,9 @@
       <div class="spinner" style:display="block"></div>
       <span class="status-text">Loading {normalized}</span>
     </div>
+  {:else if overviewState?.status === "error" && overviewState.notFound && !overview}
+    <h1 class="list-title">Stock not found</h1>
+    <p class="subtitle">No stock matches {normalized}. Check the symbol for typos.</p>
   {:else if overviewState?.status === "error" && !overview}
     <div class="status-bar s-err">
       <span class="status-text">
