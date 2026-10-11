@@ -4,7 +4,7 @@ Compact notes for AI agents working in this repo.
 
 ## Project shape
 - **Backend** (`backend/`): packaged FastAPI app (`app/`) on SQLAlchemy 2 + Alembic, PostgreSQL. Layered into `api/` routers, `services/`, `models.py`, `schemas.py`, `security.py`, `config.py` (pydantic-settings), `db.py`, `seed.py`, `migrate.py`.
-- **Frontend** (`frontend/`): Svelte 5 + Vite + TypeScript SPA. Reactive stores in `src/lib/stores/*.svelte.ts` (runes), typed API client in `src/lib/api/`, lightweight history routing in `src/lib/stores/router.svelte.ts`, components in `src/lib/components/`. Built to `frontend/dist/`, which the backend serves (SPA fallback + path-traversal guard in `app/main.py`).
+- **Frontend** (`frontend/`): Svelte 5 + Vite + TypeScript SPA. Reactive stores in `src/lib/stores/*.svelte.ts` (runes), typed API client in `src/lib/api/`, lightweight history routing in `src/lib/stores/router.svelte.ts`, components in `src/lib/components/`. Built to `frontend/dist/`, which the backend serves (SPA fallback for the router's paths, path-traversal guard, and HTML error pages for non-API requests in `app/main.py` and `app/error_pages.py`). When adding a client route, extend `CLIENT_ROUTE` in `app/main.py`.
 - Deployed as a single container via Coolify/Nixpacks. `.python-version` = 3.12, `.nvmrc` = 24 (Vite 8 needs Node 20.19+/22.12+).
 
 ## Local development
