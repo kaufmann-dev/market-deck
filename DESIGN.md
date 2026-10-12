@@ -90,13 +90,13 @@ typography:
     lineHeight: 14px
     letterSpacing: 0.12em
   data-md:
-    fontFamily: Google Sans Code
+    fontFamily: JetBrains Mono
     fontSize: 14px
     fontWeight: "400"
     lineHeight: 20px
     letterSpacing: 0em
   data-sm:
-    fontFamily: Google Sans Code
+    fontFamily: JetBrains Mono
     fontSize: 12px
     fontWeight: "400"
     lineHeight: 16px
@@ -250,7 +250,7 @@ For data-dense grid views requiring chromatic encoding, a six-step diverging sca
 
 ## Typography
 
-The design system uses a dual-font strategy: **Inter** for all UI text and **Google Sans Code** for numeric data, codes, and timestamps.
+The design system uses a dual-font strategy: **Inter** for all UI text and **JetBrains Mono** for numeric data, codes, and timestamps.
 
 - **Display/Headline sizes** use light weight (400) with negative letter-spacing (-0.02em to -0.01em) for a clean, editorial look at large sizes.
 - **Labels** (`{typography.label-md}`) are the backbone of the UI. They are always uppercase with 0.1em letter-spacing and appear above every control group. This convention eliminates placeholder text, creates consistent vertical rhythm, and makes the interface scannable at a glance.

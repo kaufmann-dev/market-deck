@@ -51,7 +51,7 @@ Optional: `MARKETDECK_DB_CONNECT_RETRIES` (30), `MARKETDECK_DB_CONNECT_RETRY_DEL
 
 ## Frontend notes
 - No manual cache-busting; Vite emits hashed asset filenames.
-- Icons are bundled via `@lucide/svelte` (no CDN). Charts are bundled via `lightweight-charts` (no CDN). Google Fonts stay linked in `frontend/index.html`.
+- Icons are bundled via `@lucide/svelte` (no CDN). Charts are bundled via `lightweight-charts` (no CDN). Fonts are bundled via `@fontsource-variable/inter` and `@fontsource-variable/jetbrains-mono` (no CDN).
 - Router state is authoritative for views: `/`, `/list/{slug}`, and `/stock/{symbol}`. The app store holds loaded data and bridges route changes to `loadMetrics` / `loadStock`.
 - Design system ("Terminal Dark") lives in `frontend/src/app.css`, ported from the original stylesheet. Keep DESIGN.md as the source of truth for visual rules.
 
