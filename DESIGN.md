@@ -42,49 +42,49 @@ colors:
   on-background: "#ffffff"
 typography:
   display-lg:
-    fontFamily: Google Sans
+    fontFamily: Inter
     fontSize: 32px
     fontWeight: "400"
     lineHeight: 40px
     letterSpacing: -0.02em
   headline-lg:
-    fontFamily: Google Sans
+    fontFamily: Inter
     fontSize: 28px
     fontWeight: "400"
     lineHeight: 36px
     letterSpacing: -0.01em
   headline-md:
-    fontFamily: Google Sans
+    fontFamily: Inter
     fontSize: 20px
     fontWeight: "400"
     lineHeight: 28px
     letterSpacing: -0.01em
   title-md:
-    fontFamily: Google Sans
+    fontFamily: Inter
     fontSize: 15px
     fontWeight: "600"
     lineHeight: 20px
     letterSpacing: 0.1em
   body-md:
-    fontFamily: Google Sans
+    fontFamily: Inter
     fontSize: 14px
     fontWeight: "400"
     lineHeight: 20px
     letterSpacing: 0em
   body-sm:
-    fontFamily: Google Sans
+    fontFamily: Inter
     fontSize: 13px
     fontWeight: "400"
     lineHeight: 18px
     letterSpacing: 0em
   label-md:
-    fontFamily: Google Sans
+    fontFamily: Inter
     fontSize: 11px
     fontWeight: "400"
     lineHeight: 16px
     letterSpacing: 0.1em
   label-sm:
-    fontFamily: Google Sans
+    fontFamily: Inter
     fontSize: 10px
     fontWeight: "400"
     lineHeight: 14px
@@ -250,7 +250,7 @@ For data-dense grid views requiring chromatic encoding, a six-step diverging sca
 
 ## Typography
 
-The design system uses a dual-font strategy: **Google Sans** for all UI text and **Google Sans Code** for numeric data, codes, and timestamps.
+The design system uses a dual-font strategy: **Inter** for all UI text and **Google Sans Code** for numeric data, codes, and timestamps.
 
 - **Display/Headline sizes** use light weight (400) with negative letter-spacing (-0.02em to -0.01em) for a clean, editorial look at large sizes.
 - **Labels** (`{typography.label-md}`) are the backbone of the UI. They are always uppercase with 0.1em letter-spacing and appear above every control group. This convention eliminates placeholder text, creates consistent vertical rhythm, and makes the interface scannable at a glance.

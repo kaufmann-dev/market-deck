@@ -67,7 +67,7 @@
 }
 
 body {
-  font-family: 'Google Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
   background:
     radial-gradient(circle at 80% 0%, rgba(75, 40, 150, 0.18) 0%, transparent 50%),
     radial-gradient(circle at 10% 100%, rgba(15, 110, 140, 0.15) 0%, transparent 50%),
@@ -718,7 +718,7 @@ select {
   text-align: center;
   text-align-last: center;
   border-radius: 0;
-  font-family: 'Google Sans', sans-serif;
+  font-family: 'Inter', sans-serif;
   font-size: 11px;
   font-weight: 500;
   cursor: pointer;
