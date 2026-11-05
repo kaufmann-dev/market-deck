@@ -5,7 +5,7 @@ Compact notes for AI agents working in this repo.
 ## Project shape
 - **Backend** (`backend/`): packaged FastAPI app (`app/`) on SQLAlchemy 2 + Alembic, PostgreSQL. Layered into `api/` routers, `services/`, `models.py`, `schemas.py`, `security.py`, `config.py` (pydantic-settings), `db.py`, `seed.py`, `migrate.py`.
 - **Frontend** (`frontend/`): Svelte 5 + Vite + TypeScript SPA. Reactive stores in `src/lib/stores/*.svelte.ts` (runes), typed API client in `src/lib/api/`, lightweight history routing in `src/lib/stores/router.svelte.ts`, components in `src/lib/components/`. Built to `frontend/dist/`, which the backend serves (SPA fallback + path-traversal guard in `app/main.py`).
-- Deployed as a single container via Coolify/Nixpacks. `.python-version` = 3.12, `.nvmrc` = 24 (Vite 8 needs Node 20.19+/22.12+).
+- Deployed as a single container via Coolify/Railpack. `.python-version` = 3.12, `.nvmrc` = 24 (Vite 8 needs Node 20.19+/22.12+); keep `packages.node` in `railpack.json` on the same major as `.nvmrc`.
 
 ## Local development
 Two terminals. Backend (needs PostgreSQL running):
@@ -73,5 +73,5 @@ cd frontend && npm run check && npm run build      # svelte-check + production b
 Tests need a container runtime for testcontainers; set `TEST_DATABASE_URL` to point at an existing Postgres if none is available.
 
 ## Deployment
-- `nixpacks.toml`: Python + Node providers; build phase runs the frontend build; start runs `app.migrate` then uvicorn.
+- `railpack.json`: Railpack detects Python from `requirements.txt`; `packages.node` adds Node for the build step, which runs the frontend build; start runs `app.migrate` then uvicorn.
 - Coolify: port 8000, health check `/api/auth/demo-info`. Migrations run automatically on start. Do not point `DATABASE_URL` at `localhost` inside Coolify — use the internal PostgreSQL service hostname.

@@ -6,7 +6,7 @@ Dashboard for displaying financial asset information — live prices, FX convers
 
 - **Backend** (`backend/`): packaged FastAPI app on SQLAlchemy 2 with Alembic migrations. Layered into API routers, services, and ORM models. Computes all FX conversion and return metrics server-side.
 - **Frontend** (`frontend/`): Svelte 5 + Vite + TypeScript single-page app, built to `frontend/dist/` and served by the backend (with SPA fallback).
-- **Deployment**: a single container built by Nixpacks (Python + Node), fronted by Coolify, backed by a separate Coolify PostgreSQL resource.
+- **Deployment**: a single container built by Railpack (Python + Node), fronted by Coolify, backed by a separate Coolify PostgreSQL resource.
 
 ## Navigation
 
@@ -31,10 +31,10 @@ Dashboard for displaying financial asset information — live prices, FX convers
 - Server-side metrics: FX conversion, lookback returns, and monthly heatmap data computed on the backend.
 - Single-stock dashboards with shareable `/stock/{symbol}` URLs, global Yahoo symbol search, native-currency charts, fundamentals, technicals, news, and analyst readouts.
 - In-memory rate limits on Yahoo-backed read endpoints.
-- Coolify/Nixpacks deployment files:
+- Coolify/Railpack deployment files:
   - `.python-version`, `.nvmrc`
   - `requirements.txt`
-  - `nixpacks.toml`
+  - `railpack.json`
 
 ## Deploy on Coolify
 
@@ -44,7 +44,7 @@ This app is designed for a Coolify application resource plus a separate Coolify 
 2. Create and deploy a PostgreSQL resource in the same Coolify project/environment.
 3. Copy the PostgreSQL internal connection URL.
 4. Create a Coolify application from this repository.
-5. Use the default Nixpacks build pack.
+5. Select the Railpack build pack.
 6. Keep **Is it a static site?** disabled.
 7. Set:
 
@@ -54,19 +54,12 @@ Port Exposes: 8000
 Health Check Path: /api/auth/demo-info
 ```
 
-`nixpacks.toml` defines the whole build and start:
+Railpack detects Python from `requirements.txt` and `.python-version`; `railpack.json` extends that plan:
 
-- **Build**: installs `requirements.txt` (Python) and runs `cd frontend && npm ci && npm run build` (Node, pinned to 24 via `.nvmrc`).
+- **Build**: installs `requirements.txt` (Python) and runs `cd frontend && npm ci && npm run build` (Node 24 from `packages.node`, matching `.nvmrc`).
 - **Start**: `cd backend && python -m app.migrate && uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}` — runs pending Alembic migrations, then serves the API and the built `frontend/dist/`.
 
-Leave the Coolify Start Command blank so it uses `nixpacks.toml`. Coolify normally provides `PORT` from `Port Exposes`; the server falls back to `8000` if `PORT` is absent.
-
-If the Nixpacks polyglot detection ever fails to install the frontend (e.g. Node not provisioned), add an explicit install phase to `nixpacks.toml`:
-
-```toml
-[phases.install]
-cmds = ["pip install -r requirements.txt", "cd frontend && npm ci"]
-```
+Leave the Coolify Start Command blank so it uses `railpack.json`. Coolify normally provides `PORT` from `Port Exposes`; the server falls back to `8000` if `PORT` is absent.
 
 Use the PostgreSQL internal URL for `DATABASE_URL`, for example:
 
@@ -154,7 +147,7 @@ The schema is managed by Alembic. On startup, `app.migrate` runs before the serv
 - A **legacy database from before this refactor** (a `watchlists` table but no `alembic_version`) is stamped at the baseline revision `0001` — which matches that schema exactly — and then upgraded. Watchlists, tickers, tags, settings, and caches are preserved; obsolete local password-user rows are removed by the OIDC migration.
 - A fresh database has all migrations applied.
 
-The `nixpacks.toml` start command also runs migrations, so they are applied automatically on every deploy.
+The `railpack.json` start command also runs migrations, so they are applied automatically on every deploy.
 
 ### Database Seeding
 
